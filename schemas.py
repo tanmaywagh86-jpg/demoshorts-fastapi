@@ -20,13 +20,15 @@ class SongResponse(SongCreate):
 
 
 class InteractionCreate(BaseModel):
-    user_id: int
     clip_id: int
     action: Literal["like", "skip", "replay", "complete"]
 
 
-class InteractionResponse(InteractionCreate):
+class InteractionResponse(BaseModel):
     id: int
+    user_id: int
+    clip_id: int
+    action: Literal["like", "skip", "replay", "complete"]
     created_at: datetime
 
     class Config:
@@ -45,3 +47,27 @@ class SongCreateResponse(SongCreateRequest):
 
     class Config:
         from_attributes = True
+
+
+class UserRegisterRequest(BaseModel):
+    username: str
+    password: str
+
+
+class UserRegisterResponse(BaseModel):
+    id: int
+    username: str
+
+    class Config:
+        from_attributes = True
+
+
+class UserLoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class TokenResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+

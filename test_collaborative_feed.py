@@ -86,8 +86,9 @@ class CollaborativeFeedTest(unittest.TestCase):
         self.db.close()
 
     def test_similar_users_add_cross_genre_candidates_and_exclude_seen_clips(self):
+        target_user = self.db.query(models.User).filter(models.User.id == 1).first()
         first_page = get_personalized_feed(
-            user_id=1, limit=1, cursor=None, db=self.db
+            limit=1, cursor=None, current_user=target_user, db=self.db
         )
 
         self.assertEqual(first_page["items"][0]["youtube_id"], "recommended")
@@ -95,7 +96,7 @@ class CollaborativeFeedTest(unittest.TestCase):
         self.assertIsNotNone(first_page["next_cursor"])
 
         second_page = get_personalized_feed(
-            user_id=1, limit=1, cursor=first_page["next_cursor"], db=self.db
+            limit=1, cursor=first_page["next_cursor"], current_user=target_user, db=self.db
         )
 
         self.assertEqual(

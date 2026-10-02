@@ -2,9 +2,10 @@ from fastapi import FastAPI, Depends, HTTPException, Query
 from sqlalchemy import case, func, literal, or_, select
 from sqlalchemy.orm import Session
 
+import auth
 import models
 import schemas
-from database import engine, SessionLocal
+from database import engine, SessionLocal, get_db
 
 
 # Create database tables
@@ -13,21 +14,59 @@ models.Base.metadata.create_all(bind=engine)
 app = FastAPI()
 
 
-# Database dependency
-def get_db():
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
 # Test endpoint
 @app.get("/api/test")
 def say_hello():
     return {
         "message": "Hello from FastAPI! The Python server is running in the cs code as backend."
     }
+
+
+# Authentication endpoints
+@app.post("/auth/register", response_model=schemas.UserRegisterResponse, status_code=201)
+def register(
+    user_data: schemas.UserRegisterRequest,
+    db: Session = Depends(get_db),
+):
+    existing_user = (
+        db.query(models.User)
+        .filter(models.User.username == user_data.username)
+        .first()
+    )
+    if existing_user is not None:
+        raise HTTPException(status_code=409, detail="Username already exists")
+
+    db_user = models.User(
+        username=user_data.username,
+        hashed_password=auth.hash_password(user_data.password),
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+@app.post("/auth/login", response_model=schemas.TokenResponse)
+def login(
+    login_data: schemas.UserLoginRequest,
+    db: Session = Depends(get_db),
+):
+    user = (
+        db.query(models.User)
+        .filter(models.User.username == login_data.username)
+        .first()
+    )
+    if user is None or not auth.verify_password(
+        login_data.password, user.hashed_password or ""
+    ):
+        raise HTTPException(
+            status_code=401, detail="Invalid username or password"
+        )
+
+    access_token = auth.create_access_token(
+        data={"sub": str(user.id), "username": user.username}
+    )
+    return schemas.TokenResponse(access_token=access_token, token_type="bearer")
 
 
 # POST: Add a new song
@@ -150,17 +189,18 @@ def get_feed(
 @app.post("/interactions", response_model=schemas.InteractionResponse)
 def create_interaction(
     interaction: schemas.InteractionCreate,
+    current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(models.User).filter(models.User.id == interaction.user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
     clip = db.query(models.Clip).filter(models.Clip.id == interaction.clip_id).first()
     if clip is None:
         raise HTTPException(status_code=404, detail="Clip not found")
 
-    db_interaction = models.Interaction(**interaction.model_dump())
+    db_interaction = models.Interaction(
+        user_id=current_user.id,
+        clip_id=interaction.clip_id,
+        action=interaction.action,
+    )
     db.add(db_interaction)
     db.commit()
     db.refresh(db_interaction)
@@ -169,15 +209,12 @@ def create_interaction(
 
 @app.get("/feed/personalized")
 def get_personalized_feed(
-    user_id: int,
     limit: int = Query(default=10, ge=1, le=20),
     cursor: str | None = Query(default=None),
+    current_user: models.User = Depends(auth.get_current_user),
     db: Session = Depends(get_db),
 ):
-    user = db.query(models.User).filter(models.User.id == user_id).first()
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-
+    user_id = current_user.id
     action_score = case(
         (models.Interaction.action == "like", 3),
         (models.Interaction.action == "replay", 2),
@@ -285,7 +322,7 @@ def get_personalized_feed(
         )
     )
 
-    if cursor is not None:
+    if cursor is not None and isinstance(cursor, str):
         try:
             cursor_score, cursor_clip_id = map(int, cursor.split(":", 1))
         except ValueError as error:
