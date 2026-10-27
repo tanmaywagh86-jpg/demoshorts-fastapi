@@ -86,13 +86,15 @@ def detect_beats(audio_path):
     return tempo, beat_times
 
 
-def refine_boundaries(start_time, end_time, beat_times):
-
-    search_window = 2.0
-    min_duration = 30.0
-    max_duration = 60.0
-    duration_tolerance = 2.0
-
+def refine_boundaries(
+    start_time,
+    end_time,
+    beat_times,
+    min_duration=20.0,
+    max_duration=30.0,
+    search_window=2.0,
+    duration_tolerance=2.0,
+):
     beats = np.asarray(beat_times)
 
     if len(beats) == 0:
@@ -173,6 +175,106 @@ def refine_boundaries(start_time, end_time, beat_times):
         return start_time, end_time
 
     return round(refined_start, 2), round(refined_end, 2)
+
+
+def get_audio_duration(audio_path):
+    """Returns total duration of an audio file in seconds."""
+    y, sr = load_audio_for_analysis(audio_path)
+    return float(len(y) / sr) if sr > 0 else 0.0
+
+
+def find_energy_candidate_windows(
+    audio_path,
+    target_duration=25.0,
+    min_duration=20.0,
+    max_duration=30.0,
+    top_k=3,
+    hop_size=5.0,
+):
+    """Discovers top high-energy candidate discovery windows (20-30s) from audio using RMS energy and beat tracking."""
+    times, rms = analyze_energy(audio_path)
+    if len(times) == 0:
+        return []
+
+    total_duration = float(times[-1])
+    if total_duration <= min_duration:
+        return [
+            {
+                "start_time": 0,
+                "end_time": int(round(total_duration)),
+                "reason": "Full audio track",
+                "source": "audio",
+            }
+        ]
+
+    tempo, beat_times = detect_beats(audio_path)
+
+    # Sliding window search
+    window_candidates = []
+    current_start = 0.0
+    while current_start + min_duration <= total_duration:
+        current_end = min(current_start + target_duration, total_duration)
+        mask = (times >= current_start) & (times <= current_end)
+        window_rms = rms[mask]
+        if len(window_rms) > 0:
+            avg_energy = float(np.mean(window_rms))
+            peak_energy = float(np.max(window_rms))
+            window_candidates.append({
+                "raw_start": current_start,
+                "raw_end": current_end,
+                "avg_energy": avg_energy,
+                "peak_energy": peak_energy,
+            })
+        current_start += hop_size
+
+    # Sort by average energy descending
+    window_candidates.sort(key=lambda w: w["avg_energy"], reverse=True)
+
+    selected_candidates = []
+    for cand in window_candidates:
+        if len(selected_candidates) >= top_k:
+            break
+
+        c_start = cand["raw_start"]
+        c_end = cand["raw_end"]
+
+        # Check overlap with already selected candidates (require centers/windows to be separated by at least 15s)
+        overlap = False
+        for sel in selected_candidates:
+            s_start = sel["start_time"]
+            s_end = sel["end_time"]
+            overlap_dur = max(0, min(c_end, s_end) - max(c_start, s_start))
+            if overlap_dur >= 15.0:
+                overlap = True
+                break
+
+        if overlap:
+            continue
+
+        # Refine boundaries to nearest musical beats
+        ref_start, ref_end = refine_boundaries(
+            c_start,
+            c_end,
+            beat_times,
+            min_duration=min_duration,
+            max_duration=max_duration,
+        )
+
+        final_start = int(round(ref_start))
+        final_end = int(round(ref_end))
+        if final_end > final_start and (final_end - final_start) >= int(min_duration * 0.75):
+            selected_candidates.append({
+                "start_time": final_start,
+                "end_time": final_end,
+                "average_energy": round(cand["avg_energy"], 4),
+                "peak_energy": round(cand["peak_energy"], 4),
+                "reason": f"High audio energy peak (avg RMS: {cand['avg_energy']:.3f})",
+                "source": "audio",
+            })
+
+    # Sort selected candidates chronologically
+    selected_candidates.sort(key=lambda c: c["start_time"])
+    return selected_candidates
 
 
 def score_candidate(start_time, end_time, times, rms):
