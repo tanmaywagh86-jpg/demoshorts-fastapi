@@ -4,31 +4,19 @@ from typing import Literal
 from pydantic import BaseModel
 
 
-class SongCreate(BaseModel):
-    title: str
-    artist: str
-    youtube_id: str
-    start_time: int
-    end_time: int
-
-
-class SongResponse(SongCreate):
-    id: int
-    
-    class Config:
-        from_attributes = True
+InteractionAction = Literal["like", "save", "skip", "replay", "complete"]
 
 
 class InteractionCreate(BaseModel):
     clip_id: int
-    action: Literal["like", "skip", "replay", "complete"]
+    action: InteractionAction
 
 
 class InteractionResponse(BaseModel):
     id: int
     user_id: int
     clip_id: int
-    action: Literal["like", "skip", "replay", "complete"]
+    action: InteractionAction
     created_at: datetime
 
     class Config:

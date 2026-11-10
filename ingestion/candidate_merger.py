@@ -1,11 +1,16 @@
-from typing import Any
+from typing import Any, Callable
+
+from ingestion.settings import CLIP_MAX_SECONDS, CLIP_MIN_SECONDS, CLIP_OVERLAP_SECONDS
+
+# Lower number = kept first when a song has more candidates than the cap.
+SOURCE_PRIORITY = {"both": 0, "groq": 1, "audio": 2}
 
 
 def validate_candidate(
     candidate: dict[str, Any],
     song_duration: float | None = None,
-    min_duration: int = 15,
-    max_duration: int = 35,
+    min_duration: int = CLIP_MIN_SECONDS,
+    max_duration: int = CLIP_MAX_SECONDS,
 ) -> bool:
     """Validates that a candidate clip has valid, positive timestamps and a reasonable duration."""
     try:
@@ -28,111 +33,92 @@ def validate_candidate(
     return True
 
 
+def _overlaps(
+    a: dict[str, Any],
+    b: dict[str, Any],
+    overlap_threshold_seconds: int,
+    iou_threshold: float,
+) -> bool:
+    overlap = max(0, min(a["end_time"], b["end_time"]) - max(a["start_time"], b["start_time"]))
+    union = max(a["end_time"], b["end_time"]) - min(a["start_time"], b["start_time"])
+    iou = overlap / union if union > 0 else 0.0
+    return overlap >= overlap_threshold_seconds or iou >= iou_threshold
+
+
 def merge_and_deduplicate_candidates(
     groq_candidates: list[dict[str, Any]] | None = None,
     audio_candidates: list[dict[str, Any]] | None = None,
     song_duration: float | None = None,
-    min_duration: int = 15,
-    max_duration: int = 35,
-    overlap_threshold_seconds: int = 12,
+    min_duration: int = CLIP_MIN_SECONDS,
+    max_duration: int = CLIP_MAX_SECONDS,
+    overlap_threshold_seconds: int = CLIP_OVERLAP_SECONDS,
     iou_threshold: float = 0.45,
+    energy_fn: Callable[[int, int], float | None] | None = None,
+    max_clips: int | None = None,
 ) -> list[dict[str, Any]]:
-    """Combines lyrical Groq candidates and acoustic librosa candidates into a single deduplicated candidate pool.
+    """Combines lyrical (Groq) and acoustic (librosa) candidates into one deduplicated list.
 
-    - Validates candidate bounds.
-    - Tags candidates with source: 'groq', 'audio', or 'both'.
-    - Merges substantially overlapping sections intelligently.
-    - Returns sorted list: [{'start_time': int, 'end_time': int, 'source': str, 'reason': str}]
+    Lyrics decide the boundaries: when a Groq candidate and an audio window cover the
+    same section, the Groq start/end are kept (they follow lyric lines, so the clip
+    does not cut a phrase) and the candidate is tagged source='both'. Audio windows
+    that match no Groq candidate are kept as source='audio'.
+
+    energy_fn(start, end), when given, adds an 'energy' value used only for ranking.
+    max_clips, when given, keeps the best candidates: 'both' first, then 'groq',
+    then 'audio', higher energy first within each group.
+
+    Returns a chronological list of
+    {'start_time': int, 'end_time': int, 'source': str, 'reason': str[, 'energy': float]}.
     """
-    pool: list[dict[str, Any]] = []
 
-    # Tag and collect Groq candidates
-    if groq_candidates:
-        for c in groq_candidates:
+    def collect(candidates, default_source, default_reason):
+        collected = []
+        for c in sorted(candidates or [], key=lambda x: (int(x["start_time"]), int(x["end_time"]))):
             cand = {
                 "start_time": int(c["start_time"]),
                 "end_time": int(c["end_time"]),
-                "source": c.get("source", "groq"),
-                "reason": c.get("reason", "Lyrical/thematic section selected by Groq"),
+                "source": c.get("source", default_source),
+                "reason": c.get("reason", default_reason),
             }
-            if validate_candidate(cand, song_duration, min_duration, max_duration):
-                pool.append(cand)
+            if not validate_candidate(cand, song_duration, min_duration, max_duration):
+                continue
+            if any(_overlaps(cand, kept, overlap_threshold_seconds, iou_threshold) for kept in collected):
+                continue  # duplicate of an earlier candidate from the same source
+            collected.append(cand)
+        return collected
 
-    # Tag and collect Audio candidates
-    if audio_candidates:
-        for c in audio_candidates:
-            cand = {
-                "start_time": int(c["start_time"]),
-                "end_time": int(c["end_time"]),
-                "source": c.get("source", "audio"),
-                "reason": c.get("reason", "High-energy audio region identified by librosa"),
-            }
-            if validate_candidate(cand, song_duration, min_duration, max_duration):
-                pool.append(cand)
+    kept = collect(groq_candidates, "groq", "Lyrical/thematic section selected by Groq")
+    audio = collect(audio_candidates, "audio", "High-energy audio region identified by librosa")
 
-    if not pool:
-        return []
+    for window in audio:
+        match = next(
+            (k for k in kept if _overlaps(window, k, overlap_threshold_seconds, iou_threshold)),
+            None,
+        )
+        if match is None:
+            kept.append(window)
+        elif match["source"] == "groq":
+            match["source"] = "both"
+            match["reason"] = f"{match['reason']} (matches a high-energy section)"
 
-    # Sort by start_time
-    pool.sort(key=lambda x: (x["start_time"], x["end_time"]))
-
-    merged: list[dict[str, Any]] = []
-
-    for cand in pool:
-        if not merged:
-            merged.append(cand)
-            continue
-
-        last = merged[-1]
-
-        # Calculate overlap duration and IoU
-        overlap = max(0, min(last["end_time"], cand["end_time"]) - max(last["start_time"], cand["start_time"]))
-        union = max(last["end_time"], cand["end_time"]) - min(last["start_time"], cand["start_time"])
-        iou = overlap / union if union > 0 else 0.0
-
-        is_overlapping = overlap >= overlap_threshold_seconds or iou >= iou_threshold
-
-        if is_overlapping:
-            # Determine combined source
-            sources = set()
-            for s in (last.get("source", ""), cand.get("source", "")):
-                if s == "both":
-                    sources.add("groq")
-                    sources.add("audio")
-                elif s in ("groq", "audio"):
-                    sources.add(s)
-
-            combined_source = "both" if len(sources) > 1 else (next(iter(sources)) if sources else "groq")
-
-            # Determine best start and end times
-            # If one is from audio, audio beat refinement is often tighter on start/end
-            if cand.get("source") == "audio" and last.get("source") == "groq":
-                best_start = cand["start_time"]
-                best_end = cand["end_time"]
-                best_reason = f"{last['reason']} (aligned with high-energy audio peak)"
-            elif last.get("source") == "audio" and cand.get("source") == "groq":
-                best_start = last["start_time"]
-                best_end = last["end_time"]
-                best_reason = f"{cand['reason']} (aligned with high-energy audio peak)"
-            else:
-                # Merge bounds, keeping duration within target max_duration
-                best_start = min(last["start_time"], cand["start_time"])
-                best_end = min(best_start + max_duration, max(last["end_time"], cand["end_time"]))
-                best_reason = f"{last['reason']} | {cand['reason']}" if last["reason"] != cand["reason"] else last["reason"]
-
-            merged[-1] = {
-                "start_time": best_start,
-                "end_time": best_end,
-                "source": combined_source,
-                "reason": best_reason,
-            }
-        else:
-            merged.append(cand)
-
-    # Final pass: clamp end_time if song_duration is given
+    # Clamp to the end of the song when its length is known.
     if song_duration is not None and song_duration > 0:
-        for item in merged:
-            if item["end_time"] > int(round(song_duration)):
-                item["end_time"] = int(round(song_duration))
+        last_second = int(round(song_duration))
+        for item in kept:
+            item["end_time"] = min(item["end_time"], last_second)
+        kept = [item for item in kept if item["end_time"] > item["start_time"]]
 
-    return merged
+    if energy_fn is not None:
+        for item in kept:
+            energy = energy_fn(item["start_time"], item["end_time"])
+            if energy is not None:
+                item["energy"] = energy
+
+    if max_clips is not None and len(kept) > max_clips:
+        kept.sort(
+            key=lambda c: (SOURCE_PRIORITY.get(c["source"], 3), -c.get("energy", 0.0))
+        )
+        kept = kept[:max_clips]
+
+    kept.sort(key=lambda c: (c["start_time"], c["end_time"]))
+    return kept

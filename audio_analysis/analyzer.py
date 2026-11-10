@@ -3,9 +3,7 @@ from pathlib import Path
 
 import librosa
 import numpy as np
-import matplotlib.pyplot as plt
 
-from clip_selection.selector import select_clips
 from database import SessionLocal
 from models import Clip, Song
 
@@ -183,16 +181,49 @@ def get_audio_duration(audio_path):
     return float(len(y) / sr) if sr > 0 else 0.0
 
 
+def load_audio_features(audio_path):
+    """Converts and loads the audio once and returns everything the pipeline needs:
+    duration (s), RMS energy over time, and beat timestamps."""
+    y, sr = load_audio_for_analysis(audio_path)
+
+    rms = librosa.feature.rms(y=y, frame_length=2048, hop_length=512)[0]
+    times = librosa.frames_to_time(np.arange(len(rms)), sr=sr, hop_length=512)
+
+    tempo, beat_frames = librosa.beat.beat_track(y=y, sr=sr)
+    beat_times = librosa.frames_to_time(beat_frames, sr=sr)
+
+    return {
+        "duration": float(len(y) / sr) if sr > 0 else 0.0,
+        "times": times,
+        "rms": rms,
+        "tempo": float(np.asarray(tempo).item()),
+        "beat_times": beat_times,
+    }
+
+
+def average_energy(features, start_time, end_time):
+    """Average RMS energy between two timestamps, or None if the range is empty."""
+    times, rms = features["times"], features["rms"]
+    window = rms[(times >= start_time) & (times <= end_time)]
+    return float(np.mean(window)) if len(window) > 0 else None
+
+
 def find_energy_candidate_windows(
-    audio_path,
+    audio_path=None,
     target_duration=25.0,
     min_duration=20.0,
     max_duration=30.0,
     top_k=3,
     hop_size=5.0,
+    features=None,
 ):
-    """Discovers top high-energy candidate discovery windows (20-30s) from audio using RMS energy and beat tracking."""
-    times, rms = analyze_energy(audio_path)
+    """Discovers top high-energy candidate discovery windows (20-30s) from audio using RMS energy and beat tracking.
+
+    Pass features=load_audio_features(path) to reuse audio that is already loaded.
+    """
+    if features is None:
+        features = load_audio_features(audio_path)
+    times, rms = features["times"], features["rms"]
     if len(times) == 0:
         return []
 
@@ -207,7 +238,7 @@ def find_energy_candidate_windows(
             }
         ]
 
-    tempo, beat_times = detect_beats(audio_path)
+    beat_times = features["beat_times"]
 
     # Sliding window search
     window_candidates = []
@@ -431,224 +462,3 @@ def get_storage_counts(youtube_id):
 
     finally:
         db.close()
-
-
-if __name__ == "__main__":
-
-    # --------------------------------
-    # 1. Find audio
-    # --------------------------------
-
-    audio_files = list(PROJECT_ROOT.glob("*.mp3"))
-
-    if not audio_files:
-        print("ERROR: No MP3 files found.")
-        exit()
-
-    audio_file = audio_files[0]
-
-    print(f"Using audio: {audio_file}")
-
-
-    # --------------------------------
-    # 2. Analyze audio
-    # --------------------------------
-
-    times, rms = analyze_energy(audio_file)
-
-    print(f"\nAudio frames: {len(rms)}")
-    print(f"Audio duration: {times[-1]:.2f} seconds")
-
-
-    # --------------------------------
-    # 3. Detect beats
-    # --------------------------------
-
-    tempo, beat_times = detect_beats(audio_file)
-
-    print(f"\nEstimated BPM: {float(tempo):.2f}")
-    print("First 20 detected beat timestamps:")
-
-    for beat_time in beat_times[:20]:
-
-        print(f"{beat_time:.2f}s")
-
-
-    # --------------------------------
-    # 4. Get transcript
-    # --------------------------------
-
-    transcript_files = list(
-        PROJECT_ROOT.glob("*_transcript.txt")
-    )
-
-    if not transcript_files:
-
-        print("ERROR: No transcript file found.")
-        exit()
-
-    transcript_file = transcript_files[0]
-
-    print(f"\nUsing transcript: {transcript_file}")
-
-
-    with open(
-        transcript_file,
-        "r",
-        encoding="utf-8"
-    ) as f:
-
-        transcript = f.read()
-
-
-    # --------------------------------
-    # 5. Groq selects candidates
-    # --------------------------------
-
-    print("\nAsking Groq to select clips...")
-
-    clips = select_clips(transcript)
-
-    print("\nGroq candidates:\n")
-
-    for i, clip in enumerate(clips, start=1):
-
-        print(
-            f"Clip {i}: "
-            f"{clip['start_time']}s -> "
-            f"{clip['end_time']}s"
-        )
-
-        print(
-            f"Reason: {clip['reason']}\n"
-        )
-
-
-    # --------------------------------
-    # 6. Refine candidate boundaries
-    # --------------------------------
-
-    refined_clips = []
-
-    print("\nBeat-refined boundaries:\n")
-
-    for i, clip in enumerate(clips, start=1):
-
-        original_start = clip["start_time"]
-        original_end = clip["end_time"]
-
-        refined_start, refined_end = refine_boundaries(
-            original_start,
-            original_end,
-            beat_times
-        )
-
-        refined_clip = {
-            **clip,
-            "refined_start_time": refined_start,
-            "refined_end_time": refined_end
-        }
-
-        refined_clips.append(refined_clip)
-
-        original_duration = original_end - original_start
-        refined_duration = refined_end - refined_start
-
-        print(f"Clip {i}")
-        print(
-            f"Original: {original_start}s -> {original_end}s "
-            f"({original_duration:.2f}s)"
-        )
-        print(
-            f"Refined: {refined_start:.2f}s -> {refined_end:.2f}s "
-            f"({refined_duration:.2f}s)"
-        )
-        print()
-
-
-    # --------------------------------
-    # 7. Store refined clips
-    # --------------------------------
-
-    youtube_id = audio_file.stem
-
-    first_storage_result = save_refined_clips(
-        youtube_id,
-        refined_clips
-    )
-
-    second_storage_result = save_refined_clips(
-        youtube_id,
-        refined_clips
-    )
-
-    storage_counts = get_storage_counts(youtube_id)
-
-    print("\nPostgreSQL storage:\n")
-    print(f"Song exists: {storage_counts['song_exists']}")
-    print(
-        f"First storage saved clips: "
-        f"{first_storage_result['saved_count']}"
-    )
-    print(
-        f"Second storage saved clips: "
-        f"{second_storage_result['saved_count']}"
-    )
-    print(
-        f"Stored songs for current YouTube ID: "
-        f"{storage_counts['songs']}"
-    )
-    print(
-        f"Stored clips for current song: "
-        f"{storage_counts['clips']}"
-    )
-
-
-    # --------------------------------
-    # 8. Score candidates using audio
-    # --------------------------------
-
-    scored_clips = analyze_candidates(
-        clips,
-        times,
-        rms
-    )
-
-
-    print("\nAudio analysis:\n")
-
-    for i, clip in enumerate(
-        scored_clips,
-        start=1
-    ):
-
-        print(f"Clip {i}")
-
-        print(
-            f"Start: {clip['start_time']}s"
-        )
-
-        print(
-            f"End: {clip['end_time']}s"
-        )
-
-        print(
-            f"Average energy: "
-            f"{clip['average_energy']}"
-        )
-
-        print(
-            f"Peak energy: "
-            f"{clip['peak_energy']}"
-        )
-
-        print(
-            f"Peak time: "
-            f"{clip['peak_time']}s"
-        )
-
-        print(
-            f"Reason: {clip['reason']}"
-        )
-
-        print()

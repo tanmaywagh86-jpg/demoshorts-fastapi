@@ -1,12 +1,17 @@
 import os
 
+from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
 
-SQLALCHEMY_DATABASE_URL = os.getenv(
-    "DATABASE_URL",
-    "postgresql://postgres:pass%40123@localhost:5432/demoshorts_db",
-)
+load_dotenv()
+
+SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL")
+if not SQLALCHEMY_DATABASE_URL:
+    raise RuntimeError(
+        "DATABASE_URL is not set. Add it to the .env file, for example: "
+        "DATABASE_URL=postgresql://USER:PASSWORD@localhost:5432/demoshorts_db"
+    )
 
 connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}
 engine = create_engine(SQLALCHEMY_DATABASE_URL, connect_args=connect_args)
@@ -25,4 +30,4 @@ def get_db():
     try:
         yield db
     finally:
-        db.close()
+        db.close()

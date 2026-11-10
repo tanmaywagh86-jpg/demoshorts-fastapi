@@ -13,6 +13,8 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+POSITIVE_ACTIONS = ("like", "save", "replay", "complete")
+
 
 # Test endpoint
 @app.get("/api/test")
@@ -69,31 +71,16 @@ def login(
     return schemas.TokenResponse(access_token=access_token, token_type="bearer")
 
 
-# POST: Add a new song
-@app.post("/api/songs", response_model=schemas.SongResponse)
-def add_song(song: schemas.SongCreate, db: Session = Depends(get_db)):
-
-    db_song = models.Song(**song.model_dump())
-
-    db.add(db_song)
-    db.commit()
-    db.refresh(db_song)
-
-    return db_song
-
-
 # GET: Get all songs
-@app.get("/api/songs", response_model=list[schemas.SongResponse])
+@app.get("/api/songs", response_model=list[schemas.SongCreateResponse])
 def get_songs(db: Session = Depends(get_db)):
-
-    songs = db.query(models.Song).all()
-   
-    return songs
+    return db.query(models.Song).order_by(models.Song.id).all()
 
 
 @app.post("/songs", response_model=schemas.SongCreateResponse)
 def create_song(
     song: schemas.SongCreateRequest,
+    current_admin: models.User = Depends(auth.get_current_admin),
     db: Session = Depends(get_db),
 ):
     existing_song = (
@@ -196,6 +183,20 @@ def create_interaction(
     if clip is None:
         raise HTTPException(status_code=404, detail="Clip not found")
 
+    # Repeating the same action on the same clip returns the existing record,
+    # so repeat likes/replays cannot inflate recommendation scores.
+    existing = (
+        db.query(models.Interaction)
+        .filter(
+            models.Interaction.user_id == current_user.id,
+            models.Interaction.clip_id == interaction.clip_id,
+            models.Interaction.action == interaction.action,
+        )
+        .first()
+    )
+    if existing is not None:
+        return existing
+
     db_interaction = models.Interaction(
         user_id=current_user.id,
         clip_id=interaction.clip_id,
@@ -217,6 +218,7 @@ def get_personalized_feed(
     user_id = current_user.id
     action_score = case(
         (models.Interaction.action == "like", 3),
+        (models.Interaction.action == "save", 3),
         (models.Interaction.action == "replay", 2),
         (models.Interaction.action == "complete", 2),
         (models.Interaction.action == "skip", -3),
@@ -244,7 +246,7 @@ def get_personalized_feed(
         select(models.Interaction.clip_id)
         .where(
             models.Interaction.user_id == user_id,
-            models.Interaction.action.in_(("like", "replay", "complete")),
+            models.Interaction.action.in_(POSITIVE_ACTIONS),
         )
     )
     similar_users = (
@@ -256,7 +258,7 @@ def get_personalized_feed(
         )
         .filter(
             models.Interaction.user_id != user_id,
-            models.Interaction.action.in_(("like", "replay", "complete")),
+            models.Interaction.action.in_(POSITIVE_ACTIONS),
             models.Interaction.clip_id.in_(current_positive_clip_ids),
         )
         .group_by(models.Interaction.user_id)
@@ -264,6 +266,7 @@ def get_personalized_feed(
     )
     collaborative_action_score = case(
         (models.Interaction.action == "like", 3),
+        (models.Interaction.action == "save", 3),
         (models.Interaction.action == "replay", 2),
         (models.Interaction.action == "complete", 2),
         else_=0,
@@ -280,7 +283,7 @@ def get_personalized_feed(
             models.Interaction.user_id == similar_users.c.user_id,
         )
         .filter(
-            models.Interaction.action.in_(("like", "replay", "complete")),
+            models.Interaction.action.in_(POSITIVE_ACTIONS),
         )
         .group_by(models.Interaction.clip_id)
         .subquery()
@@ -306,13 +309,10 @@ def get_personalized_feed(
             collaborative_scores,
             models.Clip.id == collaborative_scores.c.clip_id,
         )
-        .filter(
-            ~models.Clip.id.in_(interacted_clip_ids),
-            or_(
-                genre_scores.c.genre.isnot(None),
-                collaborative_scores.c.clip_id.isnot(None),
-            ),
-        )
+        # Every unseen clip is a candidate. Clips with no genre or collaborative
+        # signal score 0, so a new user still gets a feed (in clip order) and an
+        # established user sees scored clips first, then the rest, then disliked genres.
+        .filter(~models.Clip.id.in_(interacted_clip_ids))
         .order_by(
             (
                 func.coalesce(genre_scores.c.score, literal(0))
