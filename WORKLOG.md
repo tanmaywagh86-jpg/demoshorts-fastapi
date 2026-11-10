@@ -5,6 +5,19 @@ Newest entries go at the top of "Log". Update this file whenever code changes.
 
 ## Log
 
+### 2026-11-11 — Admin role for song creation
+
+- `models.py`: new `is_admin` column on `users` (false by default).
+- `auth.py`: new `get_current_admin` dependency; non-admins get 403 "Admin access required".
+- `main.py`: `POST /songs` now requires an admin.
+- New `make_admin.py`: `python make_admin.py <username>` grants admin, `--revoke` removes it.
+  Registration can never grant it.
+- Local database: ran `ALTER TABLE users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE`.
+  Any other copy of the database (a teammate's, a server) needs the same statement, because
+  there are no migrations yet.
+- Tests: 33 pass, 1 new plus the song-creation test extended.
+- Not covered: the ingestion CLI writes to the database directly and is not behind the admin check.
+
 ### 2026-11-11 — Clip length changed to 30–60 s (Tanmay's decision)
 
 - `ingestion/settings.py`: target 30–60 s, accepted 25–65 s (5 s tolerance so a complete
@@ -75,7 +88,6 @@ connects with the `.env` settings.
 - **Playback.** Clips are YouTube IDs plus timestamps, so playback means the visible YouTube
   embed with start/end times. An audio-only feed from YouTube sources is not allowed by
   YouTube's terms. Alternative: host audio we have rights to (e.g. Creative Commons catalogues).
-- **Admin role** for song creation: recommended, not built yet (see Follow-ups).
 
 ### Follow-ups
 
@@ -84,8 +96,9 @@ connects with the `.env` settings.
   so sub-second beat alignment would be rounded away. Needs fractional-second columns (a migration).
 - **Metadata fetch.** Title still defaults to the video ID, artist to "Unknown", genre to empty.
   Empty genre weakens the genre half of the personalized ranking.
-- **Admin role** for song creation and ingestion: an `is_admin` flag on users, set by hand in
-  the database, required by `POST /songs`. Needs one new column on the `users` table.
+- **Make yourself admin**: register a user, then run `python make_admin.py <username>`.
+  The database currently has no named users.
+- Put the future `POST /songs/ingest` endpoint behind `auth.get_current_admin`.
 - **Database-level uniqueness** for interactions (currently enforced in the endpoint only).
 - `POST /songs/ingest` endpoint and CSV batch ingestion (ingestion is CLI-only today).
 - Alembic migrations (tables are created with `create_all`).

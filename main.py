@@ -80,7 +80,7 @@ def get_songs(db: Session = Depends(get_db)):
 @app.post("/songs", response_model=schemas.SongCreateResponse)
 def create_song(
     song: schemas.SongCreateRequest,
-    current_user: models.User = Depends(auth.get_current_user),
+    current_admin: models.User = Depends(auth.get_current_admin),
     db: Session = Depends(get_db),
 ):
     existing_song = (

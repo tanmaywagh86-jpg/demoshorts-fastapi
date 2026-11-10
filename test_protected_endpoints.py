@@ -53,6 +53,7 @@ class ProtectedEndpointsTest(unittest.TestCase):
         user_a = models.User(
             username="user_a",
             hashed_password=auth.hash_password("pass_a"),
+            is_admin=True,
         )
         user_b = models.User(
             username="user_b",
@@ -266,12 +267,19 @@ class ProtectedEndpointsTest(unittest.TestCase):
             [item["clip_id"] for item in feed], [self.clip_pop_2_id, self.clip_rock_id]
         )
 
-    # 9. Creating a song needs a login; listing songs works
-    def test_song_creation_requires_login_and_listing_works(self):
+    # 9. Creating a song needs an admin login; listing songs works
+    def test_song_creation_requires_admin_and_listing_works(self):
         payload = {"youtube_id": "new_yt_0001", "title": "New", "artist": "Someone"}
 
         anonymous = self.client.post("/songs", json=payload)
         self.assertEqual(anonymous.status_code, 401)
+
+        # user_b is logged in but not an admin
+        non_admin = self.client.post(
+            "/songs", headers={"Authorization": f"Bearer {self.token_b}"}, json=payload
+        )
+        self.assertEqual(non_admin.status_code, 403)
+        self.assertIn("Admin access required", non_admin.json()["detail"])
 
         created = self.client.post(
             "/songs", headers={"Authorization": f"Bearer {self.token_a}"}, json=payload
@@ -288,6 +296,41 @@ class ProtectedEndpointsTest(unittest.TestCase):
 
         # The broken legacy creation endpoint is gone
         self.assertEqual(self.client.post("/api/songs", json=payload).status_code, 405)
+
+    # 10. Admin rights come only from make_admin, never from registration
+    def test_admin_is_granted_by_script_not_by_registration(self):
+        from make_admin import set_admin
+
+        registered = self.client.post(
+            "/auth/register",
+            json={"username": "sneaky", "password": "pass_s", "is_admin": True},
+        )
+        self.assertEqual(registered.status_code, 201)
+        token = self.client.post(
+            "/auth/login", json={"username": "sneaky", "password": "pass_s"}
+        ).json()["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        payload = {"youtube_id": "new_yt_0002", "title": "New", "artist": "Someone"}
+
+        self.assertEqual(
+            self.client.post("/songs", headers=headers, json=payload).status_code, 403
+        )
+
+        db = TestingSessionLocal()
+        self.assertFalse(set_admin("nobody_here", True, db=db))
+        self.assertTrue(set_admin("sneaky", True, db=db))
+        db.close()
+        self.assertEqual(
+            self.client.post("/songs", headers=headers, json=payload).status_code, 200
+        )
+
+        db = TestingSessionLocal()
+        self.assertTrue(set_admin("sneaky", False, db=db))
+        db.close()
+        payload["youtube_id"] = "new_yt_0003"
+        self.assertEqual(
+            self.client.post("/songs", headers=headers, json=payload).status_code, 403
+        )
 
 
 if __name__ == "__main__":

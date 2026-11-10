@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, false, func
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -36,6 +36,8 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     username = Column(String, unique=True, index=True)
     hashed_password = Column(String)
+    # Admins may add songs. Granted with make_admin.py, never through the API.
+    is_admin = Column(Boolean, nullable=False, default=False, server_default=false())
 
     interactions = relationship("Interaction", back_populates="user")
 
