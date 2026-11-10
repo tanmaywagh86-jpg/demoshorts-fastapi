@@ -5,6 +5,15 @@ Newest entries go at the top of "Log". Update this file whenever code changes.
 
 ## Log
 
+### 2026-11-11 — Decisions by Tanmay (no code change)
+
+- **Playback:** use the visible YouTube embed for now. The product is a scrollable feed, and
+  the player must let the user move forward and backward within the clip.
+- **Clip length:** 30–60 s is a target, not a strict limit; clips of 25–30 s are fine.
+  This matches the current settings (accepted 25–65 s), so nothing changed.
+- **Attribution:** commits and pull requests must not credit Claude. The four branch commits
+  were rewritten to remove the co-author line; pull request #2 is open.
+
 ### 2026-11-11 — Re-ingested six songs into the reset database (data only, no code change)
 
 - Removed the leftover test rows (4 songs, 4 clips, 3 users, 5 interactions).
@@ -108,13 +117,15 @@ connects with the `.env` settings.
 
 ### Needs a decision from Tanmay
 
-- **Playback.** Clips are YouTube IDs plus timestamps, so playback means the visible YouTube
-  embed with start/end times. An audio-only feed from YouTube sources is not allowed by
-  YouTube's terms. Alternative: host audio we have rights to (e.g. Creative Commons catalogues).
+- **Frontend framework** (not chosen yet).
 
 ### Follow-ups
 
-- **Re-ingest songs** into the reset database (cached transcripts are in `transcript_cache/`).
+- **Frontend feed** (playback decided: visible YouTube embed): scrollable feed, one clip per
+  screen, player limited to the clip's start/end with forward/backward controls, and
+  like/save/skip buttons that call `POST /interactions`.
+- **Clip problems from the first ingestion run** (see the re-ingestion entry): clips under 25 s
+  rejected, one clip ending past the end of the video, two overlapping Demons clips.
 - **Beat snapping of clip boundaries** was not done: `start_time`/`end_time` are whole seconds,
   so sub-second beat alignment would be rounded away. Needs fractional-second columns (a migration).
 - **Metadata fetch.** Title still defaults to the video ID, artist to "Unknown", genre to empty.
@@ -125,7 +136,6 @@ connects with the `.env` settings.
 - **Database-level uniqueness** for interactions (currently enforced in the endpoint only).
 - `POST /songs/ingest` endpoint and CSV batch ingestion (ingestion is CLI-only today).
 - Alembic migrations (tables are created with `create_all`).
-- Frontend and player.
 - Redis caching and a background job queue (deliberately deferred until measured).
 
 ### Write-up corrections
