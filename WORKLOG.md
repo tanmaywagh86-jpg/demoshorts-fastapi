@@ -5,6 +5,29 @@ Newest entries go at the top of "Log". Update this file whenever code changes.
 
 ## Log
 
+### 2026-11-11 — Re-ingested six songs into the reset database (data only, no code change)
+
+- Removed the leftover test rows (4 songs, 4 clips, 3 users, 5 interactions).
+- Ingested the six songs with cached transcripts; 18 clips saved. First live Groq run of the new pipeline.
+  Titles/artists came from YouTube; genres were assigned by hand and should be checked.
+
+  | YouTube ID | Title | Artist | Genre | Clips |
+  |---|---|---|---|---|
+  | `-8C_2BBVWk8` | Zara Sa | KK | bollywood | 4 |
+  | `FxGvi8O3mxM` | Fandry Song | Ajay-Atul | marathi | 1 |
+  | `crOA1iriypE` | Har Kisi Ko Nahi Milta | Arijit Singh, Neeti Mohan | bollywood | 3 |
+  | `mWRsgZuwf_8` | Demons | Imagine Dragons | rock | 4 |
+  | `ri1Ar5nEq4s` | Aaj Ki Raat | Sachin-Jigar, Madhubanti Bagchi, Divya Kumar | bollywood | 3 |
+  | `wqaF_so8RJs` | Mere Nishan | Mohammed | (none) | 3 |
+
+- Problems seen in this run (not fixed):
+  - Groq often returns clips shorter than asked. Several were rejected as under 25 s
+    (Fandry Song kept 1 of 4, Mere Nishan kept 1 of 3) and several kept clips are 25–29 s.
+  - Aaj Ki Raat has a clip ending at 285 s but the video is 278 s long. Without an audio file
+    the song length is unknown, so the end is not clamped.
+  - Demons has two clips that overlap by 5 s (12–40 and 35–71).
+- No users exist yet: register, then `python make_admin.py <username>`.
+
 ### 2026-11-11 — Admin role for song creation
 
 - `models.py`: new `is_admin` column on `users` (false by default).
