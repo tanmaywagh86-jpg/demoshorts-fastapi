@@ -1,9 +1,20 @@
 import re
 import subprocess
+import sys
+from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
-from faster_whisper import WhisperModel
 from youtube_transcript_api import YouTubeTranscriptApi
+
+from ingestion.settings import AUDIO_DIR, TRANSCRIPT_CACHE_DIR
+
+
+def transcript_cache_path(video_id: str) -> Path:
+    return TRANSCRIPT_CACHE_DIR / f"{video_id}_transcript.txt"
+
+
+def downloaded_audio_path(video_id: str) -> Path:
+    return AUDIO_DIR / f"{video_id}.mp3"
 
 
 # --------------------------------------------------
@@ -53,14 +64,13 @@ def extract_video_id(url_or_id: str) -> str:
 # --------------------------------------------------
 
 def load_cached_transcript(video_id: str) -> list[dict]:
-    """Loads a locally cached transcript file if available (e.g., {video_id}_transcript.txt)."""
+    """Loads a cached transcript from transcript_cache/{video_id}_transcript.txt if available."""
     if not video_id:
         return []
-    
-    cache_path = f"{video_id}_transcript.txt"
+
+    cache_path = transcript_cache_path(video_id)
     try:
-        import os
-        if os.path.exists(cache_path):
+        if cache_path.exists():
             entries = []
             with open(cache_path, "r", encoding="utf-8") as f:
                 for line in f:
@@ -82,10 +92,10 @@ def save_cached_transcript(video_id: str, formatted_transcript: str) -> None:
     """Saves formatted transcript to a local cache file for token and network savings."""
     if not video_id or not formatted_transcript:
         return
-    cache_path = f"{video_id}_transcript.txt"
+    cache_path = transcript_cache_path(video_id)
     try:
-        import os
-        if not os.path.exists(cache_path):
+        if not cache_path.exists():
+            cache_path.parent.mkdir(parents=True, exist_ok=True)
             with open(cache_path, "w", encoding="utf-8") as f:
                 f.write(formatted_transcript)
     except Exception:
@@ -112,8 +122,13 @@ def get_timestamped_transcript(url_or_id: str) -> list[dict]:
         ytt_api = YouTubeTranscriptApi()
         transcript_list = ytt_api.list(video_id)
 
-        # Take the first available transcript (preferring user's or manual/auto)
-        transcript = next(iter(transcript_list))
+        # Prefer captions written by a person over auto-generated ones, which
+        # are often poor for songs. Fall back to whatever is available.
+        available = list(transcript_list)
+        if not available:
+            return []
+        manual = [t for t in available if not t.is_generated]
+        transcript = manual[0] if manual else available[0]
         fetched = transcript.fetch()
         raw_data = fetched.to_raw_data()
 
@@ -186,33 +201,37 @@ def format_transcript_for_llm(transcript_data: list[dict]) -> str:
 def transcribe_with_whisper(url_or_id: str) -> list[dict]:
     """Transcribes downloaded audio using faster-whisper as a fallback."""
     video_id = extract_video_id(url_or_id)
-    audio_path = f"{video_id}.mp3"
+    audio_path = downloaded_audio_path(video_id)
 
     print(f"Running Whisper transcription for {video_id}...")
 
     try:
-        # Download audio from YouTube
-        subprocess.run(
-            [
-                "yt-dlp",
-                "-x",
-                "--audio-format", "mp3",
-                "-o", f"{video_id}.%(ext)s",
-                f"https://www.youtube.com/watch?v={video_id}",
-            ],
-            check=True,
-            capture_output=True,
-        )
+        # Imported here so the rest of the pipeline works without loading Whisper.
+        from faster_whisper import WhisperModel
+
+        # Download audio from YouTube (skipped if it was downloaded before)
+        if not audio_path.exists():
+            subprocess.run(
+                [
+                    sys.executable, "-m", "yt_dlp",
+                    "-x",
+                    "--audio-format", "mp3",
+                    "-o", str(audio_path.with_suffix(".%(ext)s")),
+                    f"https://www.youtube.com/watch?v={video_id}",
+                ],
+                check=True,
+                capture_output=True,
+            )
 
         whisper_model = WhisperModel(
-            "base",
+            "small",
             device="cpu",
             compute_type="int8",
             cpu_threads=4,
             num_workers=1,
         )
 
-        segments, _info = whisper_model.transcribe(audio_path)
+        segments, _info = whisper_model.transcribe(str(audio_path))
 
         return [
             {

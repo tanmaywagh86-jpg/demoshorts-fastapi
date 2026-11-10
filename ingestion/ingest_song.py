@@ -11,11 +11,27 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
-from audio_analysis.analyzer import find_energy_candidate_windows, get_audio_duration
+from audio_analysis.analyzer import (
+    average_energy,
+    find_energy_candidate_windows,
+    load_audio_features,
+)
 from database import SessionLocal
 from ingestion.candidate_merger import merge_and_deduplicate_candidates
 from ingestion.llm import generate_llm_candidates
-from ingestion.transcript import extract_video_id, get_timestamped_transcript
+from ingestion.settings import (
+    CLIP_MAX_SECONDS,
+    CLIP_MIN_SECONDS,
+    CLIP_TARGET_MAX_SECONDS,
+    CLIP_TARGET_MIN_SECONDS,
+    MAX_CLIPS_PER_SONG,
+)
+from ingestion.transcript import (
+    downloaded_audio_path,
+    extract_video_id,
+    get_timestamped_transcript,
+    get_transcript_with_fallback,
+)
 import models
 
 
@@ -27,15 +43,19 @@ def ingest_song(
     audio_path: str | None = None,
     force_reprocess: bool = False,
     db: Session | None = None,
+    use_whisper: bool = True,
 ) -> dict[str, Any]:
     """Coordinates automated ingestion of a song from YouTube URL / audio file:
 
     1. Checks DB for existing song and clips (idempotency gate - saves 100% LLM tokens).
     2. Extracts video ID.
-    3. Retrieves timestamped transcript (from local cache or YouTube).
+    3. Retrieves timestamped transcript (local cache, then YouTube captions, then
+       Whisper on downloaded audio unless use_whisper is False).
     4. Generates Groq candidate clips (lyrical/thematic with strict JSON output & max_tokens).
-    5. Generates librosa candidate clips (high-energy audio peaks).
-    6. Combines, validates, and deduplicates candidate clips.
+    5. Generates librosa candidate clips (high-energy audio peaks) when audio is
+       available: the audio_path given, or audio already downloaded for this video.
+    6. Combines, validates, deduplicates and ranks candidates. Lyrics decide the
+       boundaries; audio energy only confirms and ranks.
     7. Persists Song and Clips into the database.
     """
     video_id = extract_video_id(youtube_url_or_id)
@@ -84,7 +104,10 @@ def ingest_song(
 
         # Phase 1: Transcript retrieval
         print("\nFetching transcript...")
-        transcript_data = get_timestamped_transcript(video_id)
+        if use_whisper:
+            transcript_data = get_transcript_with_fallback(video_id)
+        else:
+            transcript_data = get_timestamped_transcript(video_id)
         if transcript_data:
             print(f"Transcript obtained ({len(transcript_data)} entries).")
         else:
@@ -102,16 +125,21 @@ def ingest_song(
         # Phase 3: Audio Analysis Candidate Generation
         audio_candidates = []
         song_duration = None
+        audio_features = None
+        if audio_path is None and downloaded_audio_path(video_id).exists():
+            # Reuse audio already downloaded for this video (e.g. by the Whisper fallback).
+            audio_path = str(downloaded_audio_path(video_id))
         if audio_path and os.path.exists(audio_path):
             print(f"\nRunning audio analysis on {audio_path}...")
             try:
-                song_duration = get_audio_duration(audio_path)
+                audio_features = load_audio_features(audio_path)
+                song_duration = audio_features["duration"]
                 audio_candidates = find_energy_candidate_windows(
-                    audio_path,
-                    target_duration=25.0,
-                    min_duration=20.0,
-                    max_duration=30.0,
+                    target_duration=(CLIP_TARGET_MIN_SECONDS + CLIP_TARGET_MAX_SECONDS) / 2,
+                    min_duration=float(CLIP_TARGET_MIN_SECONDS),
+                    max_duration=float(CLIP_TARGET_MAX_SECONDS),
                     top_k=3,
+                    features=audio_features,
                 )
                 print(f"{len(audio_candidates)} audio candidate(s) found (audio duration: {song_duration:.1f}s).")
             except Exception as e:
@@ -126,8 +154,14 @@ def ingest_song(
             groq_candidates=groq_candidates,
             audio_candidates=audio_candidates,
             song_duration=song_duration,
-            min_duration=15,
-            max_duration=35,
+            min_duration=CLIP_MIN_SECONDS,
+            max_duration=CLIP_MAX_SECONDS,
+            energy_fn=(
+                (lambda start, end: average_energy(audio_features, start, end))
+                if audio_features is not None
+                else None
+            ),
+            max_clips=MAX_CLIPS_PER_SONG,
         )
         print(f"{len(final_candidates)} unique candidate(s) after validation.")
 
@@ -240,6 +274,7 @@ def main():
     parser.add_argument("--genre", help="Optional song genre")
     parser.add_argument("--audio", help="Optional path to local authorized audio file (.mp3 or .wav)")
     parser.add_argument("--force", action="store_true", help="Force re-running LLM and audio analysis even if song exists in DB")
+    parser.add_argument("--no-whisper", action="store_true", help="Do not download audio and run Whisper when YouTube captions are unavailable")
 
     args = parser.parse_args()
 
@@ -251,6 +286,7 @@ def main():
             genre=args.genre,
             audio_path=args.audio,
             force_reprocess=args.force,
+            use_whisper=not args.no_whisper,
         )
         print("\nIngestion Summary:")
         print(f"  Song: {summary['title']} by {summary['artist']} (ID: {summary['song_id']})")

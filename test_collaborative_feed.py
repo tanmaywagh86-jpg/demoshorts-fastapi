@@ -1,11 +1,26 @@
 import os
-import unittest
 
+# Tests must never touch the real database: force in-memory SQLite before any project import.
 os.environ["DATABASE_URL"] = "sqlite://"
 
+import unittest
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
 import models
-from database import Base, SessionLocal, engine
+from database import Base
 from main import get_personalized_feed
+
+# A private in-memory engine: setUp drops every table, so this test must never
+# share an engine with the application (database.engine).
+engine = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 class CollaborativeFeedTest(unittest.TestCase):
@@ -102,7 +117,36 @@ class CollaborativeFeedTest(unittest.TestCase):
         self.assertEqual(
             second_page["items"][0]["youtube_id"], "recommended-2"
         )
-        self.assertIsNone(second_page["next_cursor"])
+        self.assertIsNotNone(second_page["next_cursor"])
+
+        # Clips with no signal for this user still appear, after the scored ones
+        third_page = get_personalized_feed(
+            limit=1, cursor=second_page["next_cursor"], current_user=target_user, db=self.db
+        )
+        self.assertEqual(third_page["items"][0]["youtube_id"], "unrelated")
+        self.assertIsNone(third_page["next_cursor"])
+
+    def test_skipped_genre_ranks_below_unscored_clips(self):
+        target_user = self.db.query(models.User).filter(models.User.id == 1).first()
+        rock_song = self.db.query(models.Song).filter(models.Song.genre == "rock").first()
+        other_rock_clip = models.Clip(song_id=rock_song.id, start_time=60, end_time=90)
+        self.db.add(other_rock_clip)
+        self.db.flush()
+        unrelated_clip = (
+            self.db.query(models.Clip)
+            .filter(models.Clip.song_id == rock_song.id, models.Clip.start_time == 20)
+            .first()
+        )
+        self.db.add(models.Interaction(user_id=1, clip_id=unrelated_clip.id, action="skip"))
+        self.db.commit()
+
+        feed = get_personalized_feed(limit=10, cursor=None, current_user=target_user, db=self.db)
+
+        # The skipped clip is gone; the other rock clip (negative genre score) comes last
+        self.assertEqual(
+            [item["clip_id"] for item in feed["items"]][-1], other_rock_clip.id
+        )
+        self.assertNotIn(unrelated_clip.id, [item["clip_id"] for item in feed["items"]])
 
 
 if __name__ == "__main__":

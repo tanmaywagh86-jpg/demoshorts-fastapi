@@ -6,6 +6,7 @@ from typing import Any
 from dotenv import load_dotenv
 from groq import Groq
 
+from ingestion.settings import CLIP_TARGET_MAX_SECONDS, CLIP_TARGET_MIN_SECONDS
 from ingestion.transcript import format_transcript_for_llm
 
 load_dotenv()
@@ -21,8 +22,8 @@ def get_groq_client() -> Groq | None:
 
 def generate_llm_candidates(
     transcript_data: list[dict[str, Any]] | str,
-    target_min_seconds: int = 20,
-    target_max_seconds: int = 30,
+    target_min_seconds: int = CLIP_TARGET_MIN_SECONDS,
+    target_max_seconds: int = CLIP_TARGET_MAX_SECONDS,
     model_name: str = "openai/gpt-oss-20b",
     max_retries: int = 3,
     initial_retry_delay: float = 2.0,

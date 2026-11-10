@@ -6,3 +6,5 @@ __pycache__/
 # Audio files
 *.mp3
 *.wav
+# Local caches (transcripts are fetched or generated per song)
+transcript_cache/

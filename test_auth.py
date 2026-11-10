@@ -1,4 +1,8 @@
 import os
+
+# Tests must never touch the real database: force in-memory SQLite before any project import.
+os.environ["DATABASE_URL"] = "sqlite://"
+
 import unittest
 from datetime import timedelta
 
