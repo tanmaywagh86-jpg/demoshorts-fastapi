@@ -1,4 +1,7 @@
+from pathlib import Path
+
 from fastapi import FastAPI, Depends, HTTPException, Query
+from fastapi.responses import HTMLResponse
 from sqlalchemy import case, func, literal, or_, select
 from sqlalchemy.orm import Session
 
@@ -13,7 +16,18 @@ models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI()
 
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+
 POSITIVE_ACTIONS = ("like", "save", "replay", "complete")
+
+
+# Frontend player endpoint
+@app.get("/", response_class=HTMLResponse)
+def index():
+    html_file = STATIC_DIR / "index.html"
+    if html_file.is_file():
+        return HTMLResponse(content=html_file.read_text(encoding="utf-8"))
+    return HTMLResponse(content="<h1>DemoShorts API is running</h1>")
 
 
 # Test endpoint

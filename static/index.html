@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>DemoShorts - Music Clip Discovery</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0b0d13;
+      --card-bg: #131722;
+      --surface: rgba(255, 255, 255, 0.08);
+      --surface-border: rgba(255, 255, 255, 0.12);
+      --accent-pink: #ff2d75;
+      --accent-violet: #8a3ffc;
+      --accent-cyan: #00f0ff;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --radius: 20px;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text-main);
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      overflow: hidden;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Container for Shorts-style Feed */
+    .app-viewport {
+      width: 100%;
+      max-width: 440px;
+      height: 100vh;
+      max-height: 920px;
+      background: #000;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      border-radius: var(--radius);
+      box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 30px rgba(138, 63, 252, 0.15);
+    }
+
+    @media (max-width: 480px) {
+      .app-viewport {
+        border-radius: 0;
+        max-height: 100vh;
+      }
+    }
+
+    /* Top Navigation Bar */
+    .top-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 40;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 800;
+      font-size: 1.15rem;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ff2d75, #00f0ff);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .btn-pill {
+      background: var(--surface);
+      border: 1px solid var(--surface-border);
+      color: var(--text-main);
+      font-size: 0.82rem;
+      font-weight: 600;
+      padding: 7px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s;
+    }
+
+    .btn-pill:hover {
+      background: rgba(255, 255, 255, 0.16);
+      border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .btn-admin {
+      background: linear-gradient(135deg, #ff8c00, #ff0055);
+      border: none;
+      color: white;
+      font-weight: 700;
+    }
+
+    /* Video Player Area */
+    .player-area {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
+      z-index: 10;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #yt-player-container {
+      width: 100%;
+      height: 100%;
+      pointer-events: none; /* Let clicks pass through to swipe / UI overlay */
+    }
+
+    .player-overlay {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 70%);
+      z-index: 20;
+      pointer-events: none;
+    }
+
+    /* Content & Metadata Overlay */
+    .content-overlay {
+      position: absolute;
+      bottom: 24px;
+      left: 20px;
+      right: 80px;
+      z-index: 30;
+      pointer-events: auto;
+    }
+
+    .genre-tag {
+      display: inline-block;
+      background: rgba(138, 63, 252, 0.35);
+      border: 1px solid rgba(138, 63, 252, 0.5);
+      color: #d1b9ff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 6px;
+      margin-bottom: 8px;
+    }
+
+    .song-title {
+      font-size: 1.35rem;
+      font-weight: 800;
+      line-height: 1.25;
+      margin-bottom: 4px;
+      color: #fff;
+      text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+    }
+
+    .song-artist {
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .clip-meta-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.8rem;
+      color: #cbd5e1;
+    }
+
+    .time-badge {
+      background: rgba(0, 0, 0, 0.6);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .progress-track {
+      width: 100%;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.2);
+      border-radius: 2px;
+      margin-top: 10px;
+      overflow: hidden;
+    }
+
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-pink), var(--accent-cyan));
+      transition: width 0.1s linear;
+    }
+
+    /* Vertical Action Sidebar */
+    .action-sidebar {
+      position: absolute;
+      bottom: 30px;
+      right: 16px;
+      z-index: 30;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      align-items: center;
+      pointer-events: auto;
+    }
+
+    .action-btn {
+      width: 52px;
+      height: 52px;
+      border-radius: 50%;
+      background: rgba(18, 22, 34, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(12px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      cursor: pointer;
+      color: white;
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+    }
+
+    .action-btn:active {
+      transform: scale(0.9);
+    }
+
+    .action-btn.active-like {
+      background: rgba(255, 45, 117, 0.3);
+      border-color: var(--accent-pink);
+      color: var(--accent-pink);
+      transform: scale(1.08);
+    }
+
+    .action-btn.active-save {
+      background: rgba(0, 240, 255, 0.3);
+      border-color: var(--accent-cyan);
+      color: var(--accent-cyan);
+      transform: scale(1.08);
+    }
+
+    .action-btn svg {
+      width: 24px;
+      height: 24px;
+      fill: currentColor;
+    }
+
+    .action-label {
+      font-size: 0.68rem;
+      font-weight: 700;
+      margin-top: 2px;
+      color: #cbd5e1;
+    }
+
+    /* Modal Styles */
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+      padding: 16px;
+    }
+
+    .modal-backdrop.active {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .modal-card {
+      background: #161b26;
+      border: 1px solid var(--surface-border);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 400px;
+      padding: 24px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+      transform: scale(0.95);
+      transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    .modal-backdrop.active .modal-card {
+      transform: scale(1);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .modal-title {
+      font-size: 1.25rem;
+      font-weight: 800;
+    }
+
+    .close-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 1.5rem;
+      line-height: 1;
+    }
+
+    .tab-bar {
+      display: flex;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 10px;
+      padding: 4px;
+      margin-bottom: 18px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 8px;
+      border: none;
+      background: transparent;
+      color: var(--text-muted);
+      font-weight: 700;
+      font-size: 0.85rem;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+
+    .tab-btn.active {
+      background: var(--surface);
+      color: white;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .form-group {
+      margin-bottom: 14px;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.8rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+    }
+
+    .form-input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--surface-border);
+      border-radius: 10px;
+      padding: 10px 14px;
+      color: white;
+      font-size: 0.95rem;
+      font-family: inherit;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-input:focus {
+      border-color: var(--accent-pink);
+    }
+
+    .submit-btn {
+      width: 100%;
+      padding: 12px;
+      border: none;
+      border-radius: 12px;
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-violet));
+      color: white;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 10px;
+      box-shadow: 0 4px 15px rgba(255, 45, 117, 0.3);
+    }
+
+    .submit-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .error-msg {
+      color: #ff4d4f;
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-top: 10px;
+      display: none;
+    }
+
+    /* Empty & Loading State */
+    .center-message {
+      position: absolute;
+      inset: 0;
+      z-index: 25;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      text-align: center;
+      padding: 30px;
+      background: #000;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid rgba(255, 255, 255, 0.1);
+      border-top-color: var(--accent-pink);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 16px;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-viewport">
+    <!-- Top Bar -->
+    <header class="top-bar">
+      <div class="brand">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="url(#logo-grad)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <defs>
+            <linearGradient id="logo-grad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#ff2d75"/>
+              <stop offset="100%" stop-color="#00f0ff"/>
+            </linearGradient>
+          </defs>
+          <polygon points="5 3 19 12 5 21 5 3"/>
+        </svg>
+        DemoShorts
+      </div>
+      <div class="user-pill">
+        <button id="admin-ingest-btn" class="btn-pill btn-admin" style="display: none;" onclick="openModal('admin-modal')">Ingest</button>
+        <button id="auth-btn" class="btn-pill" onclick="handleAuthButtonClick()">Login</button>
+      </div>
+    </header>
+
+    <!-- Center Loading / Empty State -->
+    <div id="loader-state" class="center-message">
+      <div class="spinner"></div>
+      <p style="font-weight: 600; color: #cbd5e1;">Loading your discovery feed...</p>
+    </div>
+
+    <div id="empty-state" class="center-message" style="display: none;">
+      <h3 style="font-size: 1.3rem; margin-bottom: 8px;">No clips available</h3>
+      <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Your personalized feed is caught up or no songs are ingested yet.</p>
+      <button class="btn-pill btn-admin" onclick="loadFeed()">Refresh Feed</button>
+    </div>
+
+    <!-- Video Area -->
+    <main class="player-area">
+      <div id="yt-player-container"></div>
+      <div class="player-overlay"></div>
+    </main>
+
+    <!-- Metadata & Controls -->
+    <section class="content-overlay" id="content-overlay" style="display: none;">
+      <div id="clip-genre" class="genre-tag">Pop</div>
+      <h2 id="clip-title" class="song-title">Song Title</h2>
+      <p id="clip-artist" class="song-artist">Artist Name</p>
+      <div class="clip-meta-bar">
+        <span class="time-badge" id="clip-timer">00:00 / 00:00</span>
+        <span id="clip-source" style="font-size: 0.75rem; color: var(--text-muted);">Groq & Audio</span>
+      </div>
+      <div class="progress-track">
+        <div id="progress-fill" class="progress-fill"></div>
+      </div>
+    </section>
+
+    <!-- Sidebar Actions -->
+    <aside class="action-sidebar" id="action-sidebar" style="display: none;">
+      <!-- Like -->
+      <button class="action-btn" id="like-btn" onclick="toggleInteraction('like')">
+        <svg viewBox="0 0 24 24"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>
+      </button>
+      <span class="action-label">Like</span>
+
+      <!-- Save -->
+      <button class="action-btn" id="save-btn" onclick="toggleInteraction('save')">
+        <svg viewBox="0 0 24 24"><path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/></svg>
+      </button>
+      <span class="action-label">Save</span>
+
+      <!-- Replay -->
+      <button class="action-btn" onclick="replayClip()">
+        <svg viewBox="0 0 24 24"><path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/></svg>
+      </button>
+      <span class="action-label">Replay</span>
+
+      <!-- Next / Skip -->
+      <button class="action-btn" onclick="skipClip()">
+        <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+      </button>
+      <span class="action-label">Next</span>
+    </aside>
+  </div>
+
+  <!-- Auth Modal -->
+  <div id="auth-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="auth-modal-title">Welcome to DemoShorts</h3>
+        <button class="close-btn" onclick="closeModal('auth-modal')">&times;</button>
+      </div>
+
+      <div class="tab-bar">
+        <button id="tab-login" class="tab-btn active" onclick="switchAuthTab('login')">Log In</button>
+        <button id="tab-register" class="tab-btn" onclick="switchAuthTab('register')">Register</button>
+      </div>
+
+      <form id="auth-form" onsubmit="handleAuthSubmit(event)">
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input type="text" id="auth-username" class="form-input" required autocomplete="username" placeholder="Enter username">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="password" id="auth-password" class="form-input" required autocomplete="current-password" placeholder="Enter password">
+        </div>
+        <div id="auth-error" class="error-msg"></div>
+        <button type="submit" id="auth-submit-btn" class="submit-btn">Log In</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Admin Ingest Modal -->
+  <div id="admin-modal" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Ingest Song to Clips</h3>
+        <button class="close-btn" onclick="closeModal('admin-modal')">&times;</button>
+      </div>
+
+      <form id="ingest-form" onsubmit="handleIngestSubmit(event)">
+        <div class="form-group">
+          <label class="form-label">YouTube URL or Video ID</label>
+          <input type="text" id="ingest-url" class="form-input" required placeholder="https://www.youtube.com/watch?v=...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Genre (Optional)</label>
+          <input type="text" id="ingest-genre" class="form-input" placeholder="Pop, Rock, Bollywood, etc.">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Custom Title (Optional)</label>
+          <input type="text" id="ingest-title" class="form-input" placeholder="Leave blank to auto-fetch">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Custom Artist (Optional)</label>
+          <input type="text" id="ingest-artist" class="form-input" placeholder="Leave blank to auto-fetch">
+        </div>
+        <div id="ingest-status" class="error-msg" style="color: #38ef7d;"></div>
+        <button type="submit" id="ingest-submit-btn" class="submit-btn">Start Ingestion</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Load YouTube Iframe API -->
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    // State
+    let currentUser = null;
+    let token = localStorage.getItem("demoshorts_token");
+    let feedClips = [];
+    let currentIndex = 0;
+    let nextCursor = null;
+    let ytPlayer = null;
+    let isPlayerReady = false;
+    let progressTimer = null;
+    let currentAuthMode = "login";
+    let hasCompletedCurrent = false;
+
+    // Load initial user state
+    window.addEventListener("DOMContentLoaded", async () => {
+      if (token) {
+        await fetchProfile();
+      }
+      updateAuthUI();
+      loadFeed();
+    });
+
+    // YouTube Iframe API Ready Callback
+    function onYouTubeIframeAPIReady() {
+      ytPlayer = new YT.Player("yt-player-container", {
+        height: "100%",
+        width: "100%",
+        playerVars: {
+          autoplay: 1,
+          controls: 0,
+          disablekb: 1,
+          fs: 0,
+          modestbranding: 1,
+          rel: 0,
+          playsinline: 1,
+          origin: window.location.origin
+        },
+        events: {
+          onReady: () => {
+            isPlayerReady = true;
+            if (feedClips.length > 0 && currentIndex < feedClips.length) {
+              playCurrentClip();
+            }
+          },
+          onStateChange: (event) => {
+            if (event.data === YT.PlayerState.PLAYING) {
+              startTrackingProgress();
+            }
+          }
+        }
+      });
+    }
+
+    // Feed Loading
+    async function loadFeed(cursor = null) {
+      document.getElementById("loader-state").style.display = "flex";
+      document.getElementById("empty-state").style.display = "none";
+
+      const headers = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const endpoint = token ? "/feed/personalized" : "/feed/candidate";
+      const url = cursor ? `${endpoint}?limit=5&cursor=${cursor}` : `${endpoint}?limit=5`;
+
+      try {
+        const res = await fetch(url, { headers });
+        if (res.status === 401 && token) {
+          logout();
+          return loadFeed();
+        }
+
+        const data = await res.json();
+        const items = data.items || data;
+        nextCursor = data.next_cursor || null;
+
+        if (items && items.length > 0) {
+          feedClips = cursor ? [...feedClips, ...items] : items;
+          document.getElementById("loader-state").style.display = "none";
+          document.getElementById("content-overlay").style.display = "block";
+          document.getElementById("action-sidebar").style.display = "flex";
+          if (!cursor) {
+            currentIndex = 0;
+            if (isPlayerReady) playCurrentClip();
+          }
+        } else {
+          document.getElementById("loader-state").style.display = "none";
+          if (feedClips.length === 0) {
+            document.getElementById("empty-state").style.display = "flex";
+            document.getElementById("content-overlay").style.display = "none";
+            document.getElementById("action-sidebar").style.display = "none";
+          }
+        }
+      } catch (err) {
+        console.error("Feed error:", err);
+        document.getElementById("loader-state").style.display = "none";
+        document.getElementById("empty-state").style.display = "flex";
+      }
+    }
+
+    // Playback Controller
+    function playCurrentClip() {
+      if (!isPlayerReady || currentIndex >= feedClips.length) return;
+
+      const clip = feedClips[currentIndex];
+      hasCompletedCurrent = false;
+
+      // Update UI
+      document.getElementById("clip-title").textContent = clip.song_title || "Unknown Title";
+      document.getElementById("clip-artist").textContent = clip.artist || "Unknown Artist";
+      document.getElementById("clip-genre").textContent = clip.genre || "Music";
+
+      const sourceText = clip.source ? `Source: ${clip.source}` : "Candidate Clip";
+      document.getElementById("clip-source").textContent = sourceText;
+
+      // Reset action states
+      document.getElementById("like-btn").classList.remove("active-like");
+      document.getElementById("save-btn").classList.remove("active-save");
+
+      // Cue and Play YouTube Video
+      ytPlayer.loadVideoById({
+        videoId: clip.youtube_id,
+        startSeconds: clip.start_time,
+        endSeconds: clip.end_time
+      });
+      ytPlayer.playVideo();
+    }
+
+    // Progress Loop
+    function startTrackingProgress() {
+      clearInterval(progressTimer);
+      progressTimer = setInterval(() => {
+        if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+
+        const clip = feedClips[currentIndex];
+        if (!clip) return;
+
+        const current = ytPlayer.getCurrentTime();
+        const start = clip.start_time;
+        const end = clip.end_time;
+        const duration = Math.max(0.1, end - start);
+        const elapsed = Math.max(0, current - start);
+
+        const pct = Math.min(100, (elapsed / duration) * 100);
+        document.getElementById("progress-fill").style.width = `${pct}%`;
+
+        const curMin = Math.floor(elapsed / 60);
+        const curSec = Math.floor(elapsed % 60);
+        const durMin = Math.floor(duration / 60);
+        const durSec = Math.floor(duration % 60);
+        document.getElementById("clip-timer").textContent =
+          `${String(curMin).padStart(2, '0')}:${String(curSec).padStart(2, '0')} / ${String(durMin).padStart(2, '0')}:${String(durSec).padStart(2, '0')}`;
+
+        if (current >= end - 0.25) {
+          if (!hasCompletedCurrent) {
+            hasCompletedCurrent = true;
+            submitInteraction("complete");
+          }
+          replayClip();
+        }
+      }, 100);
+    }
+
+    // Interactions
+    async function submitInteraction(action) {
+      if (!token || currentIndex >= feedClips.length) return;
+      const clip = feedClips[currentIndex];
+      try {
+        await fetch("/interactions", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify({
+            clip_id: clip.clip_id,
+            action: action
+          })
+        });
+      } catch (e) {
+        console.error("Interaction error:", e);
+      }
+    }
+
+    function toggleInteraction(action) {
+      if (!token) {
+        openModal("auth-modal");
+        return;
+      }
+      const btn = action === "like" ? document.getElementById("like-btn") : document.getElementById("save-btn");
+      const activeClass = action === "like" ? "active-like" : "active-save";
+
+      btn.classList.toggle(activeClass);
+      submitInteraction(action);
+    }
+
+    function replayClip() {
+      submitInteraction("replay");
+      const clip = feedClips[currentIndex];
+      if (ytPlayer && clip) {
+        ytPlayer.seekTo(clip.start_time, true);
+        ytPlayer.playVideo();
+      }
+    }
+
+    function skipClip() {
+      submitInteraction("skip");
+      advanceClip();
+    }
+
+    function advanceClip() {
+      currentIndex++;
+      if (currentIndex >= feedClips.length - 2 && nextCursor) {
+        loadFeed(nextCursor);
+      }
+      if (currentIndex < feedClips.length) {
+        playCurrentClip();
+      } else {
+        document.getElementById("empty-state").style.display = "flex";
+      }
+    }
+
+    // Auth Management
+    async function fetchProfile() {
+      try {
+        const res = await fetch("/auth/me", {
+          headers: { "Authorization": `Bearer ${token}` }
+        });
+        if (res.ok) {
+          currentUser = await res.json();
+        } else {
+          logout();
+        }
+      } catch {
+        logout();
+      }
+    }
+
+    function updateAuthUI() {
+      const authBtn = document.getElementById("auth-btn");
+      const adminBtn = document.getElementById("admin-ingest-btn");
+
+      if (currentUser) {
+        authBtn.textContent = currentUser.username;
+        authBtn.onclick = logout;
+        adminBtn.style.display = currentUser.is_admin ? "inline-block" : "none";
+      } else {
+        authBtn.textContent = "Log In";
+        authBtn.onclick = () => openModal("auth-modal");
+        adminBtn.style.display = "none";
+      }
+    }
+
+    function handleAuthButtonClick() {
+      if (currentUser) {
+        if (confirm(`Logged in as @${currentUser.username}. Log out?`)) {
+          logout();
+        }
+      } else {
+        openModal("auth-modal");
+      }
+    }
+
+    function logout() {
+      token = null;
+      currentUser = null;
+      localStorage.removeItem("demoshorts_token");
+      updateAuthUI();
+      loadFeed();
+    }
+
+    function switchAuthTab(mode) {
+      currentAuthMode = mode;
+      document.getElementById("tab-login").classList.toggle("active", mode === "login");
+      document.getElementById("tab-register").classList.toggle("active", mode === "register");
+      document.getElementById("auth-modal-title").textContent = mode === "login" ? "Welcome Back" : "Create Account";
+      document.getElementById("auth-submit-btn").textContent = mode === "login" ? "Log In" : "Register";
+      document.getElementById("auth-error").style.display = "none";
+    }
+
+    async function handleAuthSubmit(e) {
+      e.preventDefault();
+      const errBox = document.getElementById("auth-error");
+      errBox.style.display = "none";
+
+      const username = document.getElementById("auth-username").value.trim();
+      const password = document.getElementById("auth-password").value;
+
+      try {
+        if (currentAuthMode === "register") {
+          const res = await fetch("/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password })
+          });
+          if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err.detail || "Registration failed");
+          }
+        }
+
+        // Login to get token
+        const loginRes = await fetch("/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password })
+        });
+
+        if (!loginRes.ok) {
+          const err = await loginRes.json();
+          throw new Error(err.detail || "Invalid username or password");
+        }
+
+        const data = await loginRes.json();
+        token = data.access_token;
+        localStorage.setItem("demoshorts_token", token);
+
+        await fetchProfile();
+        updateAuthUI();
+        closeModal("auth-modal");
+        loadFeed();
+      } catch (err) {
+        errBox.textContent = err.message;
+        errBox.style.display = "block";
+      }
+    }
+
+    // Admin Ingest Submit
+    async function handleIngestSubmit(e) {
+      e.preventDefault();
+      const statusBox = document.getElementById("ingest-status");
+      const submitBtn = document.getElementById("ingest-submit-btn");
+
+      statusBox.style.display = "block";
+      statusBox.style.color = "#00f0ff";
+      statusBox.textContent = "Analyzing audio and generating candidate clips...";
+      submitBtn.disabled = true;
+
+      const payload = {
+        url: document.getElementById("ingest-url").value.trim(),
+        genre: document.getElementById("ingest-genre").value.trim() || null,
+        title: document.getElementById("ingest-title").value.trim() || null,
+        artist: document.getElementById("ingest-artist").value.trim() || null,
+        use_whisper: true
+      };
+
+      try {
+        const res = await fetch("/songs/ingest", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || "Ingestion failed");
+
+        statusBox.style.color = "#38ef7d";
+        statusBox.textContent = `Success! Saved ${data.saved_clips_count} clip(s) for '${data.title}'.`;
+        setTimeout(() => {
+          closeModal("admin-modal");
+          loadFeed();
+        }, 1500);
+      } catch (err) {
+        statusBox.style.color = "#ff4d4f";
+        statusBox.textContent = err.message;
+      } finally {
+        submitBtn.disabled = false;
+      }
+    }
+
+    // Modal Helpers
+    function openModal(id) {
+      document.getElementById(id).classList.add("active");
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove("active");
+    }
+  </script>
+</body>
+</html>

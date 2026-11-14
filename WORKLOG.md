@@ -117,11 +117,17 @@ connects with the `.env` settings.
 - Updated `ingestion/ingest_song.py` to auto-populate title and artist when not manually specified, and to clamp candidate clip durations to the true song length.
 - Updated `audio_analysis/analyzer.py` and `ingestion/candidate_merger.py` to preserve sub-second float precision (e.g. 2 decimal places) for refined beat snapping boundaries instead of truncating to integers.
 - Created `ingestion/batch_ingest.py` supporting bulk ingestion from CSV (with flexible column headers) or plain TXT files with polite rate-limiting, progress indicators, non-blocking failure recovery, and aggregated reporting.
+- Created `sample_songs.csv` pre-populated with YouTube IDs from the cached transcripts for easy batch testing.
 - Added admin-protected `POST /songs/ingest` endpoint in `main.py` using `auth.get_current_admin`. Accepts YouTube URL, optional genre, title, artist, audio file, and whisper toggle; returns detailed ingestion and clip summary (`schemas.SongIngestResponse`).
-- Added permissions & execution tests in `test_protected_endpoints.py` verifying 401 for anonymous users, 403 for non-admin users, and 200 with ingested clip details for admins.
+- Built an interactive, mobile-responsive vertical web player at `static/index.html` served at `GET /`:
+  - Official YouTube IFrame Player API embedding with automatic start/end timestamp precision looping.
+  - Full interaction controls: Like, Save, Replay, Skip, and automatic watch completion dispatch.
+  - JWT Authentication modal (Register, Login, current user display, and admin ingestion drawer).
+  - Cursor-based infinite scroll / pagination loading `GET /feed/personalized` (or candidate fallback).
+- Added permissions, execution, and frontend endpoint tests in `test_protected_endpoints.py`.
 - Added tests in `test_ingestion.py` verifying metadata extraction, clip duration clamping, sub-second float candidate validation & persistence, and CSV/TXT batch ingestion with error isolation.
 
-**Tests**: 41 pass (`venv\Scripts\python.exe -m unittest discover -s . -p "test_*.py"`).
+**Tests**: 42 pass (`venv\Scripts\python.exe -m unittest discover -s . -p "test_*.py"`).
 
 ### 2026-11-11 — Review of the project, no code changed
 
@@ -139,9 +145,8 @@ connects with the `.env` settings.
 
 ### Follow-ups
 
-- **Re-ingest songs** into the reset database (cached transcripts are in `transcript_cache/`).
+- **Re-ingest songs** into the reset database (cached transcripts are in `transcript_cache/`, seed file in `sample_songs.csv`).
 - **Make yourself admin**: register a user, then run `python make_admin.py <username>`.
-- Frontend and player (React/Next.js/mobile) consuming `GET /feed/personalized`, `POST /interactions`, `GET /auth/me`.
 - Redis caching and a background job queue (deferred until scale warrants).
 
 ### Write-up corrections

@@ -408,6 +408,12 @@ class ProtectedEndpointsTest(unittest.TestCase):
             self.assertEqual(len(data["clips"]), 2)
             self.assertEqual(data["saved_clips_count"], 2)
 
+    def test_frontend_index_endpoint(self):
+        resp = self.client.get("/")
+        self.assertEqual(resp.status_code, 200)
+        self.assertIn("DemoShorts", resp.text)
+        self.assertIn("yt-player-container", resp.text)
+
 
 if __name__ == "__main__":
     unittest.main()
