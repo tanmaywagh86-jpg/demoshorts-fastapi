@@ -2,6 +2,7 @@ from sqlalchemy import (
     Boolean,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Integer,
     String,
@@ -33,8 +34,8 @@ class Clip(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     song_id = Column(Integer, ForeignKey("songs.id"))
-    start_time = Column(Integer)
-    end_time = Column(Integer)
+    start_time = Column(Float)
+    end_time = Column(Float)
 
     song = relationship("Song", back_populates="clips")
     interactions = relationship("Interaction", back_populates="clip")

@@ -291,9 +291,9 @@ def find_energy_candidate_windows(
             max_duration=max_duration,
         )
 
-        final_start = int(round(ref_start))
-        final_end = int(round(ref_end))
-        if final_end > final_start and (final_end - final_start) >= int(min_duration * 0.75):
+        final_start = round(float(ref_start), 2)
+        final_end = round(float(ref_end), 2)
+        if final_end > final_start and (final_end - final_start) >= (min_duration * 0.75):
             selected_candidates.append({
                 "start_time": final_start,
                 "end_time": final_end,
@@ -386,8 +386,8 @@ def save_refined_clips(youtube_id, refined_clips):
         saved_count = 0
 
         for clip in refined_clips:
-            start_time = int(round(clip["refined_start_time"]))
-            end_time = int(round(clip["refined_end_time"]))
+            start_time = round(float(clip["refined_start_time"]), 2)
+            end_time = round(float(clip["refined_end_time"]), 2)
 
             existing_clip = (
                 db.query(Clip)

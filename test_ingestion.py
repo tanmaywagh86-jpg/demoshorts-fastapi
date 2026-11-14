@@ -306,6 +306,34 @@ class IngestionPipelineTest(unittest.TestCase):
         self.assertEqual(summary["clips"][0]["end_time"], 50)
         self.assertEqual(summary["clips"][0]["start_time"], 10)
 
+    def test_subsecond_precision_and_float_timestamps(self):
+        # 1. Candidate validation with fractional seconds (duration ~30.47s, within 25-65s range)
+        valid = validate_candidate({"start_time": 12.35, "end_time": 42.82})
+        self.assertTrue(valid)
+
+        # 2. Merge candidates preserving float precision
+        groq_cand = [{"start_time": 12.35, "end_time": 42.82, "reason": "Chorus"}]
+        audio_cand = [{"start_time": 50.15, "end_time": 78.40, "reason": "Drop"}]
+        merged = merge_and_deduplicate_candidates(groq_cand, audio_cand)
+        self.assertEqual(len(merged), 2)
+        self.assertEqual(merged[0]["start_time"], 12.35)
+        self.assertEqual(merged[0]["end_time"], 42.82)
+        self.assertEqual(merged[1]["start_time"], 50.15)
+        self.assertEqual(merged[1]["end_time"], 78.40)
+
+        # 3. Database persistence with float column types
+        song = models.Song(title="Subsecond Track", artist="Beat Artist", youtube_id="subsec01")
+        self.db.add(song)
+        self.db.commit()
+
+        clip = models.Clip(song_id=song.id, start_time=12.35, end_time=42.82)
+        self.db.add(clip)
+        self.db.commit()
+
+        queried = self.db.query(models.Clip).filter(models.Clip.id == clip.id).first()
+        self.assertAlmostEqual(queried.start_time, 12.35, places=2)
+        self.assertAlmostEqual(queried.end_time, 42.82, places=2)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -209,8 +209,8 @@ def ingest_song(
         # Save Clips
         saved_count = 0
         for cand in final_candidates:
-            st = int(cand["start_time"])
-            et = int(cand["end_time"])
+            st = round(float(cand["start_time"]), 2)
+            et = round(float(cand["end_time"]), 2)
 
             existing_clip = (
                 session.query(models.Clip)

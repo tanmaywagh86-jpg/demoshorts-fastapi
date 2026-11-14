@@ -9,13 +9,13 @@ SOURCE_PRIORITY = {"both": 0, "groq": 1, "audio": 2}
 def validate_candidate(
     candidate: dict[str, Any],
     song_duration: float | None = None,
-    min_duration: int = CLIP_MIN_SECONDS,
-    max_duration: int = CLIP_MAX_SECONDS,
+    min_duration: float = CLIP_MIN_SECONDS,
+    max_duration: float = CLIP_MAX_SECONDS,
 ) -> bool:
     """Validates that a candidate clip has valid, positive timestamps and a reasonable duration."""
     try:
-        start_time = int(candidate.get("start_time", -1))
-        end_time = int(candidate.get("end_time", -1))
+        start_time = float(candidate.get("start_time", -1))
+        end_time = float(candidate.get("end_time", -1))
     except (ValueError, TypeError):
         return False
 
@@ -73,10 +73,10 @@ def merge_and_deduplicate_candidates(
 
     def collect(candidates, default_source, default_reason):
         collected = []
-        for c in sorted(candidates or [], key=lambda x: (int(x["start_time"]), int(x["end_time"]))):
+        for c in sorted(candidates or [], key=lambda x: (float(x["start_time"]), float(x["end_time"]))):
             cand = {
-                "start_time": int(c["start_time"]),
-                "end_time": int(c["end_time"]),
+                "start_time": round(float(c["start_time"]), 2),
+                "end_time": round(float(c["end_time"]), 2),
                 "source": c.get("source", default_source),
                 "reason": c.get("reason", default_reason),
             }
@@ -103,7 +103,7 @@ def merge_and_deduplicate_candidates(
 
     # Clamp to the end of the song when its length is known.
     if song_duration is not None and song_duration > 0:
-        last_second = int(round(song_duration))
+        last_second = round(float(song_duration), 2)
         for item in kept:
             item["end_time"] = min(item["end_time"], last_second)
         kept = [item for item in kept if item["end_time"] > item["start_time"]]

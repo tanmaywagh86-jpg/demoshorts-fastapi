@@ -48,8 +48,8 @@ class SongIngestRequest(BaseModel):
 class IngestedClipSummary(BaseModel):
     id: int
     song_id: int
-    start_time: int
-    end_time: int
+    start_time: float
+    end_time: float
     source: str
     reason: str
 
