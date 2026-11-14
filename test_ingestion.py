@@ -1,4 +1,6 @@
 import os
+import tempfile
+from pathlib import Path
 
 # Tests must never touch the real database: force in-memory SQLite before any project import.
 os.environ["DATABASE_URL"] = "sqlite://"
@@ -11,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from database import Base
+from ingestion.batch_ingest import batch_ingest_songs, parse_batch_file
 from ingestion.candidate_merger import (
     merge_and_deduplicate_candidates,
     validate_candidate,
@@ -333,6 +336,71 @@ class IngestionPipelineTest(unittest.TestCase):
         queried = self.db.query(models.Clip).filter(models.Clip.id == clip.id).first()
         self.assertAlmostEqual(queried.start_time, 12.35, places=2)
         self.assertAlmostEqual(queried.end_time, 42.82, places=2)
+
+    def test_parse_batch_file_csv_and_txt(self):
+        # 1. Test CSV parsing
+        with tempfile.NamedTemporaryFile("w+", suffix=".csv", delete=False, encoding="utf-8") as f:
+            f.write("url,title,artist,genre\n")
+            f.write("https://www.youtube.com/watch?v=batch1,Song 1,Artist 1,Rock\n")
+            f.write("batch2,Song 2,Artist 2,Pop\n")
+            csv_path = f.name
+
+        try:
+            entries = parse_batch_file(csv_path)
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(entries[0]["url"], "https://www.youtube.com/watch?v=batch1")
+            self.assertEqual(entries[0]["title"], "Song 1")
+            self.assertEqual(entries[0]["artist"], "Artist 1")
+            self.assertEqual(entries[0]["genre"], "Rock")
+            self.assertEqual(entries[1]["url"], "batch2")
+        finally:
+            Path(csv_path).unlink(missing_ok=True)
+
+        # 2. Test TXT parsing
+        with tempfile.NamedTemporaryFile("w+", suffix=".txt", delete=False, encoding="utf-8") as f:
+            f.write("# comment line\n")
+            f.write("https://youtu.be/txtvid1\n")
+            f.write("\n")
+            f.write("txtvid2\n")
+            txt_path = f.name
+
+        try:
+            entries = parse_batch_file(txt_path)
+            self.assertEqual(len(entries), 2)
+            self.assertEqual(entries[0]["url"], "https://youtu.be/txtvid1")
+            self.assertEqual(entries[1]["url"], "txtvid2")
+        finally:
+            Path(txt_path).unlink(missing_ok=True)
+
+    @patch("ingestion.batch_ingest.ingest_song")
+    def test_batch_ingest_songs_orchestration(self, mock_ingest):
+        mock_ingest.side_effect = [
+            {"title": "Track 1", "youtube_id": "vid1", "clips": [{"id": 1}]},
+            RuntimeError("Groq quota exceeded"),
+            {"title": "Track 3", "youtube_id": "vid3", "clips": [{"id": 2}, {"id": 3}]},
+        ]
+
+        entries = [
+            {"url": "vid1", "title": "Track 1"},
+            {"url": "vid2", "title": "Track 2"},
+            {"url": "vid3", "title": "Track 3"},
+        ]
+
+        report = batch_ingest_songs(
+            entries=entries,
+            force_reprocess=False,
+            use_whisper=False,
+            delay_between_requests=0.0,
+            db=self.db,
+        )
+
+        self.assertEqual(report["total"], 3)
+        self.assertEqual(report["succeeded"], 2)
+        self.assertEqual(report["failed"], 1)
+        self.assertEqual(report["total_clips"], 3)
+        self.assertEqual(len(report["results"]), 2)
+        self.assertEqual(len(report["errors"]), 1)
+        self.assertIn("Groq quota exceeded", report["errors"][0]["error"])
 
 
 if __name__ == "__main__":
