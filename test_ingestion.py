@@ -275,6 +275,37 @@ class IngestionPipelineTest(unittest.TestCase):
         self.assertEqual(second_summary["saved_clips_count"], 0)
         self.assertEqual(len(second_summary["clips"]), 1)
 
+    @patch("ingestion.ingest_song.fetch_video_metadata")
+    @patch("ingestion.ingest_song.get_transcript_with_fallback")
+    @patch("ingestion.ingest_song.generate_llm_candidates")
+    def test_ingest_auto_populates_metadata_and_clamps_duration(
+        self, mock_llm, mock_transcript, mock_meta
+    ):
+        mock_meta.return_value = {
+            "title": "Fetched Title",
+            "artist": "Fetched Artist",
+            "duration": 50.0,
+        }
+        mock_transcript.return_value = [
+            {"start": 0.0, "duration": 5.0, "text": "Intro"},
+            {"start": 10.0, "duration": 55.0, "text": "Chorus"},
+        ]
+        # Candidate runs past the 50s song duration (10 to 60)
+        mock_llm.return_value = [
+            {"start_time": 10, "end_time": 60, "reason": "Chorus"}
+        ]
+
+        summary = ingest_song(
+            youtube_url_or_id="auto_meta_01",
+            db=self.db,
+        )
+
+        self.assertEqual(summary["title"], "Fetched Title")
+        self.assertEqual(summary["artist"], "Fetched Artist")
+        # Candidate end_time should be clamped to 50
+        self.assertEqual(summary["clips"][0]["end_time"], 50)
+        self.assertEqual(summary["clips"][0]["start_time"], 10)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -71,6 +71,13 @@ def login(
     return schemas.TokenResponse(access_token=access_token, token_type="bearer")
 
 
+@app.get("/auth/me", response_model=schemas.UserProfileResponse)
+def get_current_user_profile(
+    current_user: models.User = Depends(auth.get_current_user),
+):
+    return current_user
+
+
 # GET: Get all songs
 @app.get("/api/songs", response_model=list[schemas.SongCreateResponse])
 def get_songs(db: Session = Depends(get_db)):
@@ -96,6 +103,30 @@ def create_song(
     db.commit()
     db.refresh(db_song)
     return db_song
+
+
+@app.post("/songs/ingest", response_model=schemas.SongIngestResponse)
+def ingest_song_endpoint(
+    req: schemas.SongIngestRequest,
+    current_admin: models.User = Depends(auth.get_current_admin),
+    db: Session = Depends(get_db),
+):
+    from ingestion.ingest_song import ingest_song
+
+    try:
+        result = ingest_song(
+            youtube_url_or_id=req.url,
+            title=req.title,
+            artist=req.artist,
+            genre=req.genre,
+            use_whisper=req.use_whisper,
+            db=db,
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Ingestion failed: {e}")
 
 
 @app.get("/songs/{song_id}/clips")

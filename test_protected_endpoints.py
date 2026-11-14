@@ -249,6 +249,19 @@ class ProtectedEndpointsTest(unittest.TestCase):
         db.close()
         self.assertEqual(count, 1)
 
+    def test_interaction_unique_constraint_at_database_level(self):
+        from sqlalchemy.exc import IntegrityError
+        db = TestingSessionLocal()
+        inter1 = models.Interaction(user_id=self.user_a_id, clip_id=self.clip_rock_id, action="complete")
+        inter2 = models.Interaction(user_id=self.user_a_id, clip_id=self.clip_rock_id, action="complete")
+        db.add(inter1)
+        db.commit()
+        db.add(inter2)
+        with self.assertRaises(IntegrityError):
+            db.commit()
+        db.rollback()
+        db.close()
+
     # 8. "save" is accepted and counts as a positive signal for the genre
     def test_save_action_is_accepted_and_boosts_genre(self):
         resp = self.client.post(
@@ -331,6 +344,69 @@ class ProtectedEndpointsTest(unittest.TestCase):
         self.assertEqual(
             self.client.post("/songs", headers=headers, json=payload).status_code, 403
         )
+
+    # 11. Ingest endpoint requires admin and delegates to ingest_song
+    def test_song_ingest_endpoint_permissions_and_execution(self):
+        from unittest.mock import patch
+
+        payload = {"url": "https://www.youtube.com/watch?v=ingest_yt_01", "genre": "rock"}
+
+        # Anonymous -> 401
+        self.assertEqual(self.client.post("/songs/ingest", json=payload).status_code, 401)
+
+        # Non-admin -> 403
+        non_admin_resp = self.client.post(
+            "/songs/ingest",
+            headers={"Authorization": f"Bearer {self.token_b}"},
+            json=payload,
+        )
+        self.assertEqual(non_admin_resp.status_code, 403)
+        self.assertIn("Admin access required", non_admin_resp.json()["detail"])
+
+        # Admin with mock ingestion -> 200
+        mock_summary = {
+            "song_id": 99,
+            "youtube_id": "ingest_yt_01",
+            "title": "Ingested Song",
+            "artist": "Ingested Artist",
+            "genre": "rock",
+            "transcript_found": True,
+            "groq_candidates_count": 2,
+            "audio_candidates_count": 1,
+            "total_candidates": 2,
+            "saved_clips_count": 2,
+            "clips": [
+                {
+                    "id": 101,
+                    "song_id": 99,
+                    "start_time": 30,
+                    "end_time": 60,
+                    "source": "groq",
+                    "reason": "Chorus",
+                },
+                {
+                    "id": 102,
+                    "song_id": 99,
+                    "start_time": 90,
+                    "end_time": 120,
+                    "source": "both",
+                    "reason": "Drop",
+                },
+            ],
+        }
+
+        with patch("ingestion.ingest_song.ingest_song", return_value=mock_summary):
+            admin_resp = self.client.post(
+                "/songs/ingest",
+                headers={"Authorization": f"Bearer {self.token_a}"},
+                json=payload,
+            )
+            self.assertEqual(admin_resp.status_code, 200)
+            data = admin_resp.json()
+            self.assertEqual(data["song_id"], 99)
+            self.assertEqual(data["youtube_id"], "ingest_yt_01")
+            self.assertEqual(len(data["clips"]), 2)
+            self.assertEqual(data["saved_clips_count"], 2)
 
 
 if __name__ == "__main__":

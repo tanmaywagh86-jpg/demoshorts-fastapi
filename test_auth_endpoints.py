@@ -128,6 +128,36 @@ class AuthEndpointsTest(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
         self.assertEqual(response.json()["detail"], "Invalid username or password")
 
+    def test_get_me_authenticated(self):
+        # Register and login
+        self.client.post(
+            "/auth/register",
+            json={"username": "elena", "password": "password123"},
+        )
+        login_resp = self.client.post(
+            "/auth/login",
+            json={"username": "elena", "password": "password123"},
+        )
+        token = login_resp.json()["access_token"]
+
+        response = self.client.get(
+            "/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["username"], "elena")
+        self.assertIn("id", data)
+        self.assertIn("is_admin", data)
+        self.assertFalse(data["is_admin"])
+        self.assertNotIn("password", data)
+        self.assertNotIn("hashed_password", data)
+
+    def test_get_me_unauthenticated_returns_401(self):
+        response = self.client.get("/auth/me")
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("Missing authentication token", response.json()["detail"])
+
 
 if __name__ == "__main__":
     unittest.main()

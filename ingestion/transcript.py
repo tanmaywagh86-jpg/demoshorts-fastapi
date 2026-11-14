@@ -59,6 +59,48 @@ def extract_video_id(url_or_id: str) -> str:
     return url_or_id
 
 
+def fetch_video_metadata(url_or_id: str) -> dict:
+    """Fetches video metadata (title, artist/uploader, duration in seconds) via yt-dlp without downloading media."""
+    video_id = extract_video_id(url_or_id)
+    if not video_id:
+        return {}
+
+    try:
+        import json
+        cmd = [
+            sys.executable, "-m", "yt_dlp",
+            "--dump-json",
+            "--no-playlist",
+            "--skip-download",
+            f"https://www.youtube.com/watch?v={video_id}",
+        ]
+        proc = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        info = json.loads(proc.stdout)
+        title = info.get("title") or ""
+        artist = (
+            info.get("artist")
+            or info.get("creator")
+            or info.get("uploader")
+            or info.get("channel")
+            or "Unknown"
+        )
+        duration = float(info.get("duration") or 0.0)
+        return {
+            "title": title,
+            "artist": artist,
+            "duration": duration,
+        }
+    except Exception as e:
+        print(f"Info: Could not fetch video metadata for {video_id}: {e}")
+        return {}
+
+
 # --------------------------------------------------
 # 1. Try to get transcript from YouTube captions & Local Cache
 # --------------------------------------------------

@@ -1,4 +1,14 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String, false, func
+from sqlalchemy import (
+    Boolean,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    false,
+    func,
+)
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -44,6 +54,11 @@ class User(Base):
 
 class Interaction(Base):
     __tablename__ = "interactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "user_id", "clip_id", "action", name="uq_interaction_user_clip_action"
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"))

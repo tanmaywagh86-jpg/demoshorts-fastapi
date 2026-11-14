@@ -37,6 +37,37 @@ class SongCreateResponse(SongCreateRequest):
         from_attributes = True
 
 
+class SongIngestRequest(BaseModel):
+    url: str
+    title: str | None = None
+    artist: str | None = None
+    genre: str | None = None
+    use_whisper: bool = True
+
+
+class IngestedClipSummary(BaseModel):
+    id: int
+    song_id: int
+    start_time: int
+    end_time: int
+    source: str
+    reason: str
+
+
+class SongIngestResponse(BaseModel):
+    song_id: int
+    youtube_id: str
+    title: str
+    artist: str
+    genre: str | None = None
+    transcript_found: bool
+    groq_candidates_count: int
+    audio_candidates_count: int
+    total_candidates: int
+    saved_clips_count: int
+    clips: list[IngestedClipSummary]
+
+
 class UserRegisterRequest(BaseModel):
     username: str
     password: str
@@ -45,6 +76,15 @@ class UserRegisterRequest(BaseModel):
 class UserRegisterResponse(BaseModel):
     id: int
     username: str
+
+    class Config:
+        from_attributes = True
+
+
+class UserProfileResponse(BaseModel):
+    id: int
+    username: str
+    is_admin: bool
 
     class Config:
         from_attributes = True

@@ -29,6 +29,7 @@ from ingestion.settings import (
 from ingestion.transcript import (
     downloaded_audio_path,
     extract_video_id,
+    fetch_video_metadata,
     get_timestamped_transcript,
     get_transcript_with_fallback,
 )
@@ -102,6 +103,15 @@ def ingest_song(
         print(f"\nProcessing song...")
         print(f"Video ID: {video_id}")
 
+        song_duration = None
+        meta = fetch_video_metadata(video_id)
+        if not title and meta.get("title"):
+            title = meta["title"]
+        if not artist and meta.get("artist"):
+            artist = meta["artist"]
+        if meta.get("duration"):
+            song_duration = meta["duration"]
+
         # Phase 1: Transcript retrieval
         print("\nFetching transcript...")
         if use_whisper:
@@ -124,7 +134,6 @@ def ingest_song(
 
         # Phase 3: Audio Analysis Candidate Generation
         audio_candidates = []
-        song_duration = None
         audio_features = None
         if audio_path is None and downloaded_audio_path(video_id).exists():
             # Reuse audio already downloaded for this video (e.g. by the Whisper fallback).
@@ -147,6 +156,8 @@ def ingest_song(
         else:
             if audio_path:
                 print(f"\nAudio file not found at '{audio_path}'. Skipping audio analysis.")
+            if song_duration is None and meta.get("duration"):
+                song_duration = meta["duration"]
 
         # Phase 4: Combine, Validate, Deduplicate
         print("\nCombining candidates...")
