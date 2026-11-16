@@ -52,6 +52,7 @@
       overflow: hidden;
       border-radius: var(--radius);
       box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.9), 0 0 30px rgba(138, 63, 252, 0.15);
+      user-select: none;
     }
 
     @media (max-width: 480px) {
@@ -73,6 +74,7 @@
       align-items: center;
       padding: 16px 20px;
       background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0) 100%);
+      pointer-events: auto;
     }
 
     .brand {
@@ -118,6 +120,17 @@
       font-weight: 700;
     }
 
+    /* Reel Stage: translates smoothly up/down on scroll or drag */
+    .reel-stage {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      will-change: transform, opacity;
+      overflow: hidden;
+      z-index: 15;
+    }
+
     /* Video Player Area */
     .player-area {
       position: absolute;
@@ -134,15 +147,31 @@
     #yt-player-container {
       width: 100%;
       height: 100%;
-      pointer-events: auto;
+      pointer-events: none; /* Let events reach gesture surface */
     }
 
     .player-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.2) 30%, rgba(0,0,0,0) 60%);
+      background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.25) 35%, rgba(0,0,0,0) 65%);
       z-index: 20;
       pointer-events: none;
+    }
+
+    /* Dedicated Touchpad & Swipe Gesture Surface */
+    .gesture-surface {
+      position: absolute;
+      inset: 0;
+      z-index: 22;
+      cursor: grab;
+      touch-action: none;
+      background: transparent;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    .gesture-surface:active {
+      cursor: grabbing;
     }
 
     .yt-link-pill {
@@ -150,7 +179,7 @@
       font-weight: 600;
       color: #94a3b8;
       text-decoration: none;
-      background: rgba(255, 255, 255, 0.08);
+      background: rgba(255, 255, 255, 0.1);
       padding: 4px 10px;
       border-radius: 999px;
       border: 1px solid rgba(255, 255, 255, 0.15);
@@ -158,12 +187,13 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
+      pointer-events: auto;
     }
 
     .yt-link-pill:hover {
       color: #fff;
-      background: rgba(255, 255, 255, 0.2);
-      border-color: rgba(255, 255, 255, 0.3);
+      background: rgba(255, 255, 255, 0.25);
+      border-color: rgba(255, 255, 255, 0.4);
     }
 
     /* Content & Metadata Overlay */
@@ -172,8 +202,8 @@
       bottom: 24px;
       left: 20px;
       right: 80px;
-      z-index: 30;
-      pointer-events: auto;
+      z-index: 25;
+      pointer-events: none; /* Let drag pass through to gesture surface */
     }
 
     .genre-tag {
@@ -187,16 +217,18 @@
       letter-spacing: 0.5px;
       padding: 4px 10px;
       border-radius: 6px;
-      margin-bottom: 8px;
+      pointer-events: auto;
     }
 
     .song-title {
       font-size: 1.35rem;
       font-weight: 800;
       line-height: 1.25;
+      margin-top: 8px;
       margin-bottom: 4px;
       color: #fff;
       text-shadow: 0 2px 8px rgba(0,0,0,0.8);
+      pointer-events: none;
     }
 
     .song-artist {
@@ -204,6 +236,7 @@
       font-weight: 600;
       color: var(--text-muted);
       margin-bottom: 12px;
+      pointer-events: none;
     }
 
     .clip-meta-bar {
@@ -212,6 +245,7 @@
       gap: 12px;
       font-size: 0.8rem;
       color: #cbd5e1;
+      pointer-events: none;
     }
 
     .time-badge {
@@ -230,6 +264,7 @@
       border-radius: 2px;
       margin-top: 10px;
       overflow: hidden;
+      pointer-events: none;
     }
 
     .progress-fill {
@@ -247,7 +282,7 @@
       z-index: 30;
       display: flex;
       flex-direction: column;
-      gap: 18px;
+      gap: 16px;
       align-items: center;
       pointer-events: auto;
     }
@@ -256,7 +291,7 @@
       width: 52px;
       height: 52px;
       border-radius: 50%;
-      background: rgba(18, 22, 34, 0.8);
+      background: rgba(18, 22, 34, 0.85);
       border: 1px solid rgba(255, 255, 255, 0.15);
       backdrop-filter: blur(12px);
       display: flex;
@@ -301,26 +336,103 @@
     }
 
     .action-btn:disabled, .action-btn.btn-disabled {
-      opacity: 0.4;
+      opacity: 0.35;
       cursor: not-allowed;
     }
 
-    @keyframes slideInUp {
-      0% { transform: translateY(40px); opacity: 0.6; }
-      100% { transform: translateY(0); opacity: 1; }
+    /* Floating Heart Animation on Double Tap */
+    @keyframes heartBurst {
+      0% {
+        transform: translate(-50%, -50%) scale(0) rotate(-15deg);
+        opacity: 0;
+      }
+      40% {
+        transform: translate(-50%, -50%) scale(1.3) rotate(0deg);
+        opacity: 1;
+      }
+      70% {
+        transform: translate(-50%, -50%) scale(1.1) rotate(5deg);
+        opacity: 0.9;
+      }
+      100% {
+        transform: translate(-50%, -50%) scale(1.5) rotate(0deg);
+        opacity: 0;
+      }
     }
 
-    @keyframes slideInDown {
-      0% { transform: translateY(-40px); opacity: 0.6; }
-      100% { transform: translateY(0); opacity: 1; }
+    .floating-heart {
+      position: absolute;
+      pointer-events: none;
+      z-index: 50;
+      width: 90px;
+      height: 90px;
+      color: #ff2d75;
+      filter: drop-shadow(0 0 18px rgba(255, 45, 117, 0.9));
+      animation: heartBurst 0.75s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     }
 
-    .slide-in-up {
-      animation: slideInUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    /* Play/Pause Center Pulse Feedback */
+    @keyframes playPulse {
+      0% { transform: translate(-50%, -50%) scale(0.6); opacity: 0; }
+      50% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.9; }
+      100% { transform: translate(-50%, -50%) scale(1); opacity: 0; }
     }
 
-    .slide-in-down {
-      animation: slideInDown 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    .center-play-feedback {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 74px;
+      height: 74px;
+      border-radius: 50%;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 28;
+      pointer-events: none;
+    }
+
+    .center-play-feedback.anim-pulse {
+      animation: playPulse 0.45s ease forwards;
+    }
+
+    .center-play-feedback svg {
+      width: 34px;
+      height: 34px;
+      fill: #fff;
+    }
+
+    /* Swipe / Touchpad Scroll Hint Badge */
+    .scroll-hint-pill {
+      position: absolute;
+      top: 72px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 35;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 999px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      pointer-events: none;
+      animation: hintFade 4.5s ease forwards;
+    }
+
+    @keyframes hintFade {
+      0% { opacity: 0; transform: translate(-50%, -10px); }
+      12% { opacity: 1; transform: translate(-50%, 0); }
+      75% { opacity: 1; transform: translate(-50%, 0); }
+      100% { opacity: 0; transform: translate(-50%, -10px); visibility: hidden; }
     }
 
     /* Modal Styles */
@@ -515,6 +627,14 @@
       </div>
     </header>
 
+    <!-- Scroll & Swipe Guidance Badge -->
+    <div id="scroll-hint" class="scroll-hint-pill">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M7 15l5 5 5-5M7 9l5-5 5 5"/>
+      </svg>
+      Swipe or touchpad scroll for next clip
+    </div>
+
     <!-- Center Loading / Empty State -->
     <div id="loader-state" class="center-message">
       <div class="spinner"></div>
@@ -527,34 +647,40 @@
       <button class="btn-pill btn-admin" onclick="loadFeed()">Refresh Feed</button>
     </div>
 
-    <!-- Video Area -->
-    <main class="player-area">
-      <div id="yt-player-container"></div>
-      <div class="player-overlay" onclick="togglePlayPause()">
-        <div id="play-pause-icon" class="center-play-btn" style="display: none;">
-          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+    <!-- Reel Stage: Smooth sliding container for Instagram Reels gestures -->
+    <div id="reel-stage" class="reel-stage">
+      <!-- Video Area -->
+      <main class="player-area">
+        <div id="yt-player-container"></div>
+        <div class="player-overlay"></div>
+        <!-- Gesture surface intercepts touch swipes, touchpad two-finger scrolls and click-drags -->
+        <div id="gesture-surface" class="gesture-surface"></div>
+      </main>
+
+      <!-- Center Play/Pause Visual Feedback -->
+      <div id="play-pause-feedback" class="center-play-feedback">
+        <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      </div>
+
+      <!-- Metadata & Controls Overlay -->
+      <section class="content-overlay" id="content-overlay" style="display: none;">
+        <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;">
+          <span id="clip-genre" class="genre-tag">Pop</span>
+          <a id="yt-external-link" href="#" target="_blank" class="yt-link-pill">Watch on YouTube ↗</a>
         </div>
-      </div>
-    </main>
+        <h2 id="clip-title" class="song-title">Song Title</h2>
+        <p id="clip-artist" class="song-artist">Artist Name</p>
+        <div class="clip-meta-bar">
+          <span class="time-badge" id="clip-timer">00:00 / 00:00</span>
+          <span id="clip-source" style="font-size: 0.75rem; color: var(--text-muted);">Groq & Audio</span>
+        </div>
+        <div class="progress-track">
+          <div id="progress-fill" class="progress-fill"></div>
+        </div>
+      </section>
+    </div>
 
-    <!-- Metadata & Controls -->
-    <section class="content-overlay" id="content-overlay" style="display: none;">
-      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;">
-        <span id="clip-genre" class="genre-tag" style="margin-bottom: 0;">Pop</span>
-        <a id="yt-external-link" href="#" target="_blank" class="yt-link-pill">Watch on YouTube ↗</a>
-      </div>
-      <h2 id="clip-title" class="song-title">Song Title</h2>
-      <p id="clip-artist" class="song-artist">Artist Name</p>
-      <div class="clip-meta-bar">
-        <span class="time-badge" id="clip-timer">00:00 / 00:00</span>
-        <span id="clip-source" style="font-size: 0.75rem; color: var(--text-muted);">Groq & Audio</span>
-      </div>
-      <div class="progress-track">
-        <div id="progress-fill" class="progress-fill"></div>
-      </div>
-    </section>
-
-    <!-- Sidebar Actions -->
+    <!-- Fixed Vertical Action Sidebar -->
     <aside class="action-sidebar" id="action-sidebar" style="display: none;">
       <!-- Like -->
       <button class="action-btn" id="like-btn" onclick="toggleInteraction('like')">
@@ -648,7 +774,7 @@
   </div>
 
   <script>
-    // State
+    // App State
     let currentUser = null;
     let token = localStorage.getItem("demoshorts_token");
     let feedClips = [];
@@ -659,6 +785,11 @@
     let progressTimer = null;
     let currentAuthMode = "login";
     let hasCompletedCurrent = false;
+    let isReelTransitioning = false;
+
+    // DOM Elements
+    const reelStage = document.getElementById("reel-stage");
+    const gestureSurface = document.getElementById("gesture-surface");
 
     // Load initial user state
     window.addEventListener("DOMContentLoaded", async () => {
@@ -667,6 +798,7 @@
       }
       updateAuthUI();
       loadFeed();
+      setupGestureHandlers();
     });
 
     // YouTube Iframe API setup
@@ -682,8 +814,8 @@
         host: "https://www.youtube.com",
         playerVars: {
           autoplay: 1,
-          controls: 1,
-          fs: 1,
+          controls: 0,
+          fs: 0,
           modestbranding: 1,
           rel: 0,
           playsinline: 1,
@@ -697,12 +829,8 @@
             }
           },
           onStateChange: (event) => {
-            const playIcon = document.getElementById("play-pause-icon");
             if (event.data === YT.PlayerState.PLAYING) {
-              if (playIcon) playIcon.style.display = "none";
               startTrackingProgress();
-            } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.UNSTARTED || event.data === YT.PlayerState.CUED) {
-              if (playIcon) playIcon.style.display = "flex";
             }
           },
           onError: (event) => {
@@ -710,13 +838,12 @@
             const src = document.getElementById("clip-source");
             const extLink = document.getElementById("yt-external-link");
             const href = extLink ? extLink.href : "#";
-            if (src) src.innerHTML = `Embedding restricted by owner. <a href="${href}" target="_blank" style="color: var(--accent-cyan); text-decoration: underline;">Watch on YouTube ↗</a> or tap Next.`;
+            if (src) src.innerHTML = `Owner restricted embedding. <a href="${href}" target="_blank" style="color: var(--accent-cyan); text-decoration: underline;">Watch on YouTube ↗</a> or swipe next.`;
           }
         }
       });
     }
 
-    // Load YouTube API script dynamically or initialize if already loaded
     if (window.YT && window.YT.Player) {
       createYouTubePlayer();
     } else {
@@ -731,26 +858,42 @@
         if (window.YT && window.YT.Player) createYouTubePlayer();
         return;
       }
-      const playIcon = document.getElementById("play-pause-icon");
       try {
         const state = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
         if (state === YT.PlayerState.PLAYING) {
           ytPlayer.pauseVideo();
-          if (playIcon) playIcon.style.display = "flex";
+          showPlayPauseFeedback(false);
         } else {
           if (ytPlayer.unMute) ytPlayer.unMute();
           ytPlayer.playVideo();
-          if (playIcon) playIcon.style.display = "none";
+          showPlayPauseFeedback(true);
         }
       } catch (err) {
         console.error("Playback toggle error:", err);
       }
     }
 
+    function showPlayPauseFeedback(isPlaying) {
+      const fb = document.getElementById("play-pause-feedback");
+      if (!fb) return;
+      fb.innerHTML = isPlaying 
+        ? `<svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>` 
+        : `<svg viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>`;
+      fb.style.display = "flex";
+      fb.classList.remove("anim-pulse");
+      void fb.offsetWidth;
+      fb.classList.add("anim-pulse");
+      setTimeout(() => {
+        fb.style.display = "none";
+      }, 450);
+    }
+
     // Feed Loading
     async function loadFeed(cursor = null) {
-      document.getElementById("loader-state").style.display = "flex";
-      document.getElementById("empty-state").style.display = "none";
+      if (!cursor) {
+        document.getElementById("loader-state").style.display = "flex";
+        document.getElementById("empty-state").style.display = "none";
+      }
 
       const headers = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
@@ -790,7 +933,9 @@
       } catch (err) {
         console.error("Feed error:", err);
         document.getElementById("loader-state").style.display = "none";
-        document.getElementById("empty-state").style.display = "flex";
+        if (feedClips.length === 0) {
+          document.getElementById("empty-state").style.display = "flex";
+        }
       }
     }
 
@@ -814,7 +959,7 @@
         link.href = `https://www.youtube.com/watch?v=${clip.youtube_id}&t=${Math.floor(clip.start_time || 0)}s`;
       }
 
-      // Update prev button state
+      // Update prev button disabled state
       const prevBtn = document.getElementById("prev-btn");
       if (prevBtn) {
         if (currentIndex === 0) {
@@ -829,22 +974,13 @@
     }
 
     // Playback Controller
-    function playCurrentClip(direction = null) {
+    function playCurrentClip() {
       if (currentIndex < 0) currentIndex = 0;
       if (currentIndex >= feedClips.length) return;
 
       const clip = feedClips[currentIndex];
       updateClipUI(clip);
       hasCompletedCurrent = false;
-
-      // Animate card transition like Instagram Reels / Shorts
-      const viewport = document.querySelector(".app-viewport");
-      if (viewport && direction) {
-        viewport.classList.remove("slide-in-up", "slide-in-down");
-        void viewport.offsetWidth; // trigger reflow
-        if (direction === "up") viewport.classList.add("slide-in-up");
-        else if (direction === "down") viewport.classList.add("slide-in-down");
-      }
 
       if (!isPlayerReady || !ytPlayer || !ytPlayer.loadVideoById) return;
 
@@ -938,106 +1074,282 @@
     }
 
     function nextClip() {
-      submitInteraction("skip");
-      advanceClip("up");
-    }
-
-    function skipClip() {
-      nextClip();
+      slideReel("next");
     }
 
     function prevClip() {
-      if (currentIndex > 0) {
-        currentIndex--;
-        playCurrentClip("down");
-      }
+      slideReel("prev");
     }
 
-    function advanceClip(direction = "up") {
-      currentIndex++;
-      if (currentIndex >= feedClips.length - 2 && nextCursor) {
-        loadFeed(nextCursor);
-      }
-      if (currentIndex < feedClips.length) {
-        playCurrentClip(direction);
-      } else {
-        document.getElementById("empty-state").style.display = "flex";
-      }
-    }
+    // =========================================================================
+    // Instagram Reels / TikTok Gestures & Animations
+    // =========================================================================
 
-    // Instagram Reels / Shorts Gesture Controls
-    let isTransitioning = false;
+    function slideReel(direction) {
+      if (isReelTransitioning) return;
 
-    // 1. Mouse Wheel / Trackpad Vertical Scrolling
-    window.addEventListener("wheel", (e) => {
-      if (document.querySelector(".modal-backdrop.active")) return;
-      if (isTransitioning) return;
-
-      if (e.deltaY > 35) {
-        isTransitioning = true;
-        nextClip();
-        setTimeout(() => { isTransitioning = false; }, 420);
-      } else if (e.deltaY < -35) {
-        if (currentIndex > 0) {
-          isTransitioning = true;
-          prevClip();
-          setTimeout(() => { isTransitioning = false; }, 420);
+      if (direction === "next") {
+        if (currentIndex >= feedClips.length - 1 && !nextCursor) {
+          // End of feed bounce
+          reelStage.style.transition = "transform 0.18s ease-out";
+          reelStage.style.transform = "translateY(-35px)";
+          setTimeout(() => {
+            reelStage.style.transition = "transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+            reelStage.style.transform = "translateY(0)";
+          }, 180);
+          return;
         }
-      }
-    }, { passive: true });
 
-    // 2. Touch Swiping Up / Down (Mobile & Touch screens)
-    let touchStartY = 0;
-    let touchStartX = 0;
+        isReelTransitioning = true;
+        submitInteraction("skip");
 
-    window.addEventListener("touchstart", (e) => {
-      if (document.querySelector(".modal-backdrop.active")) return;
-      touchStartY = e.touches[0].clientY;
-      touchStartX = e.touches[0].clientX;
-    }, { passive: true });
+        // Slide current reel UP out of view
+        reelStage.style.transition = "transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.22s ease";
+        reelStage.style.transform = "translateY(-100%)";
+        reelStage.style.opacity = "0.7";
 
-    window.addEventListener("touchend", (e) => {
-      if (document.querySelector(".modal-backdrop.active")) return;
-      if (isTransitioning) return;
-
-      const touchEndY = e.changedTouches[0].clientY;
-      const touchEndX = e.changedTouches[0].clientX;
-      const diffY = touchEndY - touchStartY;
-      const diffX = touchEndX - touchStartX;
-
-      if (Math.abs(diffY) > 40 && Math.abs(diffY) > Math.abs(diffX)) {
-        if (diffY < 0) {
-          // Swiped Up -> Next Reel
-          isTransitioning = true;
-          nextClip();
-          setTimeout(() => { isTransitioning = false; }, 420);
-        } else {
-          // Swiped Down -> Previous Reel
-          if (currentIndex > 0) {
-            isTransitioning = true;
-            prevClip();
-            setTimeout(() => { isTransitioning = false; }, 420);
+        setTimeout(() => {
+          currentIndex++;
+          if (currentIndex >= feedClips.length - 2 && nextCursor) {
+            loadFeed(nextCursor);
           }
+
+          if (currentIndex < feedClips.length) {
+            playCurrentClip();
+            // Position incoming reel at bottom
+            reelStage.style.transition = "none";
+            reelStage.style.transform = "translateY(100%)";
+            reelStage.style.opacity = "0.7";
+            void reelStage.offsetWidth; // Force DOM reflow
+
+            // Slide up into viewport
+            reelStage.style.transition = "transform 0.26s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease";
+            reelStage.style.transform = "translateY(0)";
+            reelStage.style.opacity = "1";
+          } else {
+            document.getElementById("empty-state").style.display = "flex";
+          }
+
+          setTimeout(() => {
+            isReelTransitioning = false;
+          }, 300);
+        }, 220);
+
+      } else if (direction === "prev") {
+        if (currentIndex <= 0) {
+          // Beginning of feed bounce
+          reelStage.style.transition = "transform 0.18s ease-out";
+          reelStage.style.transform = "translateY(35px)";
+          setTimeout(() => {
+            reelStage.style.transition = "transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+            reelStage.style.transform = "translateY(0)";
+          }, 180);
+          return;
         }
-      }
-    }, { passive: true });
 
-    // 3. Keyboard Arrow Keys (Up / Down) & Space to Play/Pause
-    window.addEventListener("keydown", (e) => {
+        isReelTransitioning = true;
+
+        // Slide current reel DOWN out of view
+        reelStage.style.transition = "transform 0.22s cubic-bezier(0.2, 0.9, 0.3, 1), opacity 0.22s ease";
+        reelStage.style.transform = "translateY(100%)";
+        reelStage.style.opacity = "0.7";
+
+        setTimeout(() => {
+          currentIndex--;
+          playCurrentClip();
+
+          // Position incoming reel at top
+          reelStage.style.transition = "none";
+          reelStage.style.transform = "translateY(-100%)";
+          reelStage.style.opacity = "0.7";
+          void reelStage.offsetWidth; // Force reflow
+
+          // Slide down into viewport
+          reelStage.style.transition = "transform 0.26s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.26s ease";
+          reelStage.style.transform = "translateY(0)";
+          reelStage.style.opacity = "1";
+
+          setTimeout(() => {
+            isReelTransitioning = false;
+          }, 300);
+        }, 220);
+      }
+    }
+
+    // Touchpad Wheel / Two-finger swipe accumulator
+    let wheelDeltaY = 0;
+    let wheelDebounceTimer = null;
+
+    function handleWheelScroll(e) {
       if (document.querySelector(".modal-backdrop.active")) return;
-      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      e.preventDefault();
 
-      if (e.key === "ArrowDown" || e.key === "j" || e.key === "PageDown") {
-        e.preventDefault();
-        nextClip();
-      } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") {
-        e.preventDefault();
-        prevClip();
-      } else if (e.key === " ") {
-        e.preventDefault();
-        togglePlayPause();
+      if (isReelTransitioning) return;
+
+      wheelDeltaY += e.deltaY;
+      clearTimeout(wheelDebounceTimer);
+      wheelDebounceTimer = setTimeout(() => {
+        wheelDeltaY = 0;
+      }, 160);
+
+      // Threshold: 28px triggers smooth slide transition
+      if (wheelDeltaY > 28) {
+        wheelDeltaY = 0;
+        slideReel("next");
+      } else if (wheelDeltaY < -28) {
+        wheelDeltaY = 0;
+        slideReel("prev");
       }
-    });
+    }
+
+    // Tap & Double Tap Handler
+    let lastTapTimestamp = 0;
+    let tapTimeout = null;
+
+    function handleTapGesture(e) {
+      const now = Date.now();
+      if (now - lastTapTimestamp < 280) {
+        // Double Tap -> Instagram Heart Like
+        clearTimeout(tapTimeout);
+        tapTimeout = null;
+        lastTapTimestamp = 0;
+        triggerHeartBurst(e);
+      } else {
+        lastTapTimestamp = now;
+        tapTimeout = setTimeout(() => {
+          togglePlayPause();
+          tapTimeout = null;
+        }, 260);
+      }
+    }
+
+    function triggerHeartBurst(e) {
+      const likeBtn = document.getElementById("like-btn");
+      if (likeBtn && !likeBtn.classList.contains("active-like")) {
+        toggleInteraction("like");
+      } else if (!token) {
+        openModal("auth-modal");
+      }
+
+      // Spawn floating animated heart
+      const viewport = document.querySelector(".app-viewport");
+      const rect = viewport.getBoundingClientRect();
+      const heart = document.createElement("div");
+      heart.className = "floating-heart";
+
+      const x = e.clientX ? (e.clientX - rect.left) : (rect.width / 2);
+      const y = e.clientY ? (e.clientY - rect.top) : (rect.height / 2);
+      heart.style.left = `${x}px`;
+      heart.style.top = `${y}px`;
+      heart.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>`;
+      viewport.appendChild(heart);
+
+      setTimeout(() => {
+        if (heart.parentNode) heart.parentNode.removeChild(heart);
+      }, 750);
+    }
+
+    // Setup physical drag & wheel listeners
+    function setupGestureHandlers() {
+      let isDragging = false;
+      let startY = 0;
+      let currentY = 0;
+      let dragStartTime = 0;
+
+      // 1. Pointer Events for physical swipe drag (Mouse drag, Touchscreen, Touchpad click-drag)
+      gestureSurface.addEventListener("pointerdown", (e) => {
+        if (document.querySelector(".modal-backdrop.active")) return;
+        if (isReelTransitioning) return;
+        if (e.button !== 0) return; // Only primary button
+
+        isDragging = true;
+        startY = e.clientY;
+        currentY = e.clientY;
+        dragStartTime = Date.now();
+        try { gestureSurface.setPointerCapture(e.pointerId); } catch(err) {}
+
+        reelStage.style.transition = "none";
+      });
+
+      gestureSurface.addEventListener("pointermove", (e) => {
+        if (!isDragging) return;
+        currentY = e.clientY;
+        const deltaY = currentY - startY;
+
+        // Apply edge resistance
+        let visualDelta = deltaY;
+        if ((currentIndex === 0 && deltaY > 0) || (currentIndex >= feedClips.length - 1 && deltaY < 0)) {
+          visualDelta = deltaY * 0.28;
+        }
+
+        reelStage.style.transform = `translateY(${visualDelta}px)`;
+      });
+
+      gestureSurface.addEventListener("pointerup", (e) => {
+        if (!isDragging) return;
+        isDragging = false;
+        try { gestureSurface.releasePointerCapture(e.pointerId); } catch(err) {}
+
+        const deltaY = currentY - startY;
+        const elapsed = Date.now() - dragStartTime;
+        const dist = Math.abs(deltaY);
+
+        // Tap detected
+        if (dist < 10 && elapsed < 300) {
+          reelStage.style.transition = "transform 0.2s ease-out";
+          reelStage.style.transform = "translateY(0)";
+          handleTapGesture(e);
+          return;
+        }
+
+        // Swipe detected
+        const isFlick = (dist > 25 && elapsed < 240);
+        if (deltaY < -50 || (deltaY < -25 && isFlick)) {
+          // Swiped Up -> Next Clip
+          slideReel("next");
+        } else if (deltaY > 50 || (deltaY > 25 && isFlick)) {
+          // Swiped Down -> Prev Clip
+          slideReel("prev");
+        } else {
+          // Snap back
+          reelStage.style.transition = "transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+          reelStage.style.transform = "translateY(0)";
+        }
+      });
+
+      gestureSurface.addEventListener("pointercancel", () => {
+        if (!isDragging) return;
+        isDragging = false;
+        reelStage.style.transition = "transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275)";
+        reelStage.style.transform = "translateY(0)";
+      });
+
+      // 2. Touchpad Two-finger Scroll (Wheel Event)
+      gestureSurface.addEventListener("wheel", handleWheelScroll, { passive: false });
+      window.addEventListener("wheel", (e) => {
+        // If cursor is outside the gesture surface (e.g. over sidebar, topbar or padding)
+        if (e.target !== gestureSurface && !gestureSurface.contains(e.target)) {
+          handleWheelScroll(e);
+        }
+      }, { passive: false });
+
+      // 3. Keyboard Arrow Keys
+      window.addEventListener("keydown", (e) => {
+        if (document.querySelector(".modal-backdrop.active")) return;
+        if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+        if (e.key === "ArrowDown" || e.key === "j" || e.key === "PageDown") {
+          e.preventDefault();
+          slideReel("next");
+        } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") {
+          e.preventDefault();
+          slideReel("prev");
+        } else if (e.key === " ") {
+          e.preventDefault();
+          togglePlayPause();
+        }
+      });
+    }
 
     // Auth Management
     async function fetchProfile() {
