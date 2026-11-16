@@ -654,7 +654,7 @@
       const headers = {};
       if (token) headers["Authorization"] = `Bearer ${token}`;
 
-      const endpoint = token ? "/feed/personalized" : "/feed/candidate";
+      const endpoint = token ? "/feed/personalized" : "/feed";
       const url = cursor ? `${endpoint}?limit=5&cursor=${cursor}` : `${endpoint}?limit=5`;
 
       try {
@@ -700,7 +700,7 @@
       hasCompletedCurrent = false;
 
       // Update UI
-      document.getElementById("clip-title").textContent = clip.song_title || "Unknown Title";
+      document.getElementById("clip-title").textContent = clip.title || clip.song_title || "Unknown Title";
       document.getElementById("clip-artist").textContent = clip.artist || "Unknown Artist";
       document.getElementById("clip-genre").textContent = clip.genre || "Music";
 
