@@ -257,21 +257,63 @@
       border: 1px solid rgba(255, 255, 255, 0.15);
     }
 
+    /* Draggable & Clickable Timeline Scrubber */
+    .progress-container {
+      width: 100%;
+      height: 28px;
+      padding: 11px 0;
+      cursor: pointer;
+      pointer-events: auto; /* Enables clicking and dragging */
+      margin-top: 6px;
+      position: relative;
+      touch-action: none;
+      user-select: none;
+      -webkit-user-select: none;
+      z-index: 30;
+    }
+
     .progress-track {
       width: 100%;
       height: 4px;
-      background: rgba(255, 255, 255, 0.2);
-      border-radius: 2px;
-      margin-top: 10px;
-      overflow: hidden;
+      background: rgba(255, 255, 255, 0.25);
+      border-radius: 4px;
+      position: relative;
+      transition: height 0.15s ease;
       pointer-events: none;
+    }
+
+    .progress-container:hover .progress-track,
+    .progress-container.scrubbing .progress-track {
+      height: 7px;
     }
 
     .progress-fill {
       height: 100%;
       width: 0%;
       background: linear-gradient(90deg, var(--accent-pink), var(--accent-cyan));
-      transition: width 0.1s linear;
+      border-radius: 4px;
+      position: relative;
+      transition: width 0.05s linear;
+      pointer-events: none;
+    }
+
+    .progress-thumb {
+      position: absolute;
+      top: 50%;
+      right: -6px;
+      transform: translateY(-50%) scale(0);
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 10px rgba(0, 240, 255, 0.9), 0 0 5px rgba(255, 45, 117, 0.9);
+      transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1);
+      pointer-events: none;
+    }
+
+    .progress-container:hover .progress-thumb,
+    .progress-container.scrubbing .progress-thumb {
+      transform: translateY(-50%) scale(1);
     }
 
     /* Vertical Action Sidebar */
@@ -674,8 +716,12 @@
           <span class="time-badge" id="clip-timer">00:00 / 00:00</span>
           <span id="clip-source" style="font-size: 0.75rem; color: var(--text-muted);">Groq & Audio</span>
         </div>
-        <div class="progress-track">
-          <div id="progress-fill" class="progress-fill"></div>
+        <div class="progress-container" id="progress-container" title="Click or drag to seek">
+          <div class="progress-track">
+            <div id="progress-fill" class="progress-fill">
+              <div class="progress-thumb"></div>
+            </div>
+          </div>
         </div>
       </section>
     </div>
@@ -786,6 +832,7 @@
     let currentAuthMode = "login";
     let hasCompletedCurrent = false;
     let isReelTransitioning = false;
+    let isScrubbing = false;
 
     // DOM Elements
     const reelStage = document.getElementById("reel-stage");
@@ -799,6 +846,7 @@
       updateAuthUI();
       loadFeed();
       setupGestureHandlers();
+      setupScrubber();
     });
 
     // YouTube Iframe API setup
@@ -1001,6 +1049,7 @@
       clearInterval(progressTimer);
       progressTimer = setInterval(() => {
         if (!ytPlayer || !ytPlayer.getCurrentTime) return;
+        if (isScrubbing) return; // Don't overwrite timeline while user is dragging the scrubber
 
         const clip = feedClips[currentIndex];
         if (!clip) return;
@@ -1333,7 +1382,7 @@
         }
       }, { passive: false });
 
-      // 3. Keyboard Arrow Keys
+      // 3. Keyboard Arrow Keys (Up/Down for reels, Left/Right for scrubber timeline)
       window.addEventListener("keydown", (e) => {
         if (document.querySelector(".modal-backdrop.active")) return;
         if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
@@ -1344,11 +1393,111 @@
         } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") {
           e.preventDefault();
           slideReel("prev");
+        } else if (e.key === "ArrowRight") {
+          e.preventDefault();
+          skipTime(3); // +3 seconds forward
+        } else if (e.key === "ArrowLeft") {
+          e.preventDefault();
+          skipTime(-3); // -3 seconds backward
         } else if (e.key === " ") {
           e.preventDefault();
           togglePlayPause();
         }
       });
+    }
+
+    // =========================================================================
+    // Interactive Timeline Scrubber & Seek Controls
+    // =========================================================================
+
+    function seekToPosition(clientX) {
+      if (currentIndex >= feedClips.length) return;
+      const clip = feedClips[currentIndex];
+      if (!clip) return;
+
+      const container = document.getElementById("progress-container");
+      if (!container) return;
+
+      const rect = container.getBoundingClientRect();
+      const offsetX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+      const pct = rect.width > 0 ? (offsetX / rect.width) : 0;
+
+      const duration = Math.max(0.1, clip.end_time - clip.start_time);
+      const targetTime = clip.start_time + (pct * duration);
+      const elapsed = pct * duration;
+
+      // Update fill & timer immediately for instantaneous feedback
+      document.getElementById("progress-fill").style.width = `${pct * 100}%`;
+
+      const curMin = Math.floor(elapsed / 60);
+      const curSec = Math.floor(elapsed % 60);
+      const durMin = Math.floor(duration / 60);
+      const durSec = Math.floor(duration % 60);
+      document.getElementById("clip-timer").textContent =
+        `${String(curMin).padStart(2, '0')}:${String(curSec).padStart(2, '0')} / ${String(durMin).padStart(2, '0')}:${String(durSec).padStart(2, '0')}`;
+
+      // Seek YouTube player
+      if (ytPlayer && ytPlayer.seekTo) {
+        ytPlayer.seekTo(targetTime, true);
+      }
+    }
+
+    function setupScrubber() {
+      const container = document.getElementById("progress-container");
+      if (!container) return;
+
+      // Pointer events handle both click, mouse drag, and touch scrub along the timeline
+      container.addEventListener("pointerdown", (e) => {
+        e.stopPropagation(); // Do not trigger vertical reel swipe
+        isScrubbing = true;
+        container.classList.add("scrubbing");
+        try { container.setPointerCapture(e.pointerId); } catch(err) {}
+        seekToPosition(e.clientX);
+      });
+
+      container.addEventListener("pointermove", (e) => {
+        if (!isScrubbing) return;
+        e.stopPropagation();
+        seekToPosition(e.clientX);
+      });
+
+      const endScrub = (e) => {
+        if (!isScrubbing) return;
+        isScrubbing = false;
+        container.classList.remove("scrubbing");
+        try { container.releasePointerCapture(e.pointerId); } catch(err) {}
+      };
+
+      container.addEventListener("pointerup", endScrub);
+      container.addEventListener("pointercancel", endScrub);
+
+      // Prevent wheel/touchpad scroll on progress container from skipping the reel
+      container.addEventListener("wheel", (e) => {
+        e.stopPropagation();
+      });
+    }
+
+    function skipTime(seconds) {
+      if (currentIndex >= feedClips.length) return;
+      const clip = feedClips[currentIndex];
+      if (!clip || !ytPlayer || !ytPlayer.getCurrentTime) return;
+
+      const current = ytPlayer.getCurrentTime();
+      let targetTime = current + seconds;
+      targetTime = Math.max(clip.start_time, Math.min(clip.end_time - 0.2, targetTime));
+      ytPlayer.seekTo(targetTime, true);
+
+      const elapsed = Math.max(0, targetTime - clip.start_time);
+      const duration = Math.max(0.1, clip.end_time - clip.start_time);
+      const pct = Math.min(100, (elapsed / duration) * 100);
+      document.getElementById("progress-fill").style.width = `${pct}%`;
+
+      const curMin = Math.floor(elapsed / 60);
+      const curSec = Math.floor(elapsed % 60);
+      const durMin = Math.floor(duration / 60);
+      const durSec = Math.floor(duration % 60);
+      document.getElementById("clip-timer").textContent =
+        `${String(curMin).padStart(2, '0')}:${String(curSec).padStart(2, '0')} / ${String(durMin).padStart(2, '0')}:${String(durSec).padStart(2, '0')}`;
     }
 
     // Auth Management
