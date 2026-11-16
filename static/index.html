@@ -142,7 +142,34 @@
       inset: 0;
       background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 70%);
       z-index: 20;
+      pointer-events: auto;
+      cursor: pointer;
+    }
+
+    .center-play-btn {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 68px;
+      height: 68px;
+      background: rgba(0, 0, 0, 0.65);
+      border: 2px solid rgba(255, 255, 255, 0.4);
+      border-radius: 50%;
+      display: flex;
+      justify-content: center;
+      align-items: center;
       pointer-events: none;
+      backdrop-filter: blur(8px);
+      box-shadow: 0 0 25px rgba(255, 45, 117, 0.4);
+      transition: opacity 0.2s ease;
+    }
+
+    .center-play-btn svg {
+      width: 28px;
+      height: 28px;
+      fill: white;
+      margin-left: 3px;
     }
 
     /* Content & Metadata Overlay */
@@ -486,7 +513,11 @@
     <!-- Video Area -->
     <main class="player-area">
       <div id="yt-player-container"></div>
-      <div class="player-overlay"></div>
+      <div class="player-overlay" onclick="togglePlayPause()">
+        <div id="play-pause-icon" class="center-play-btn" style="display: none;">
+          <svg viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+        </div>
+      </div>
     </main>
 
     <!-- Metadata & Controls -->
@@ -590,9 +621,6 @@
     </div>
   </div>
 
-  <!-- Load YouTube Iframe API -->
-  <script src="https://www.youtube.com/iframe_api"></script>
-
   <script>
     // State
     let currentUser = null;
@@ -615,8 +643,13 @@
       loadFeed();
     });
 
-    // YouTube Iframe API Ready Callback
-    function onYouTubeIframeAPIReady() {
+    // YouTube Iframe API setup
+    window.onYouTubeIframeAPIReady = function() {
+      createYouTubePlayer();
+    };
+
+    function createYouTubePlayer() {
+      if (ytPlayer) return;
       ytPlayer = new YT.Player("yt-player-container", {
         height: "100%",
         width: "100%",
@@ -628,6 +661,7 @@
           modestbranding: 1,
           rel: 0,
           playsinline: 1,
+          enablejsapi: 1,
           origin: window.location.origin
         },
         events: {
@@ -638,12 +672,52 @@
             }
           },
           onStateChange: (event) => {
+            const playIcon = document.getElementById("play-pause-icon");
             if (event.data === YT.PlayerState.PLAYING) {
+              if (playIcon) playIcon.style.display = "none";
               startTrackingProgress();
+            } else if (event.data === YT.PlayerState.PAUSED || event.data === YT.PlayerState.UNSTARTED || event.data === YT.PlayerState.CUED) {
+              if (playIcon) playIcon.style.display = "flex";
             }
+          },
+          onError: (event) => {
+            console.warn("YouTube player error:", event.data);
+            const src = document.getElementById("clip-source");
+            if (src) src.textContent = "Playback restricted for this video. Tap Next.";
           }
         }
       });
+    }
+
+    // Load YouTube API script dynamically or initialize if already loaded
+    if (window.YT && window.YT.Player) {
+      createYouTubePlayer();
+    } else {
+      const tag = document.createElement("script");
+      tag.src = "https://www.youtube.com/iframe_api";
+      const firstScriptTag = document.getElementsByTagName("script")[0];
+      firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+    }
+
+    function togglePlayPause() {
+      if (!ytPlayer) {
+        if (window.YT && window.YT.Player) createYouTubePlayer();
+        return;
+      }
+      const playIcon = document.getElementById("play-pause-icon");
+      try {
+        const state = ytPlayer.getPlayerState ? ytPlayer.getPlayerState() : -1;
+        if (state === YT.PlayerState.PLAYING) {
+          ytPlayer.pauseVideo();
+          if (playIcon) playIcon.style.display = "flex";
+        } else {
+          if (ytPlayer.unMute) ytPlayer.unMute();
+          ytPlayer.playVideo();
+          if (playIcon) playIcon.style.display = "none";
+        }
+      } catch (err) {
+        console.error("Playback toggle error:", err);
+      }
     }
 
     // Feed Loading
@@ -675,6 +749,7 @@
           document.getElementById("action-sidebar").style.display = "flex";
           if (!cursor) {
             currentIndex = 0;
+            updateClipUI(feedClips[0]);
             if (isPlayerReady) playCurrentClip();
           }
         } else {
@@ -692,14 +767,8 @@
       }
     }
 
-    // Playback Controller
-    function playCurrentClip() {
-      if (!isPlayerReady || currentIndex >= feedClips.length) return;
-
-      const clip = feedClips[currentIndex];
-      hasCompletedCurrent = false;
-
-      // Update UI
+    function updateClipUI(clip) {
+      if (!clip) return;
       document.getElementById("clip-title").textContent = clip.title || clip.song_title || "Unknown Title";
       document.getElementById("clip-artist").textContent = clip.artist || "Unknown Artist";
       document.getElementById("clip-genre").textContent = clip.genre || "Music";
@@ -707,17 +776,36 @@
       const sourceText = clip.source ? `Source: ${clip.source}` : "Candidate Clip";
       document.getElementById("clip-source").textContent = sourceText;
 
-      // Reset action states
+      const dur = Math.max(1, (clip.end_time || 30) - (clip.start_time || 0));
+      const durMin = Math.floor(dur / 60);
+      const durSec = Math.floor(dur % 60);
+      document.getElementById("clip-timer").textContent = `00:00 / ${String(durMin).padStart(2, '0')}:${String(durSec).padStart(2, '0')}`;
+      document.getElementById("progress-fill").style.width = "0%";
+
       document.getElementById("like-btn").classList.remove("active-like");
       document.getElementById("save-btn").classList.remove("active-save");
+    }
 
-      // Cue and Play YouTube Video
-      ytPlayer.loadVideoById({
-        videoId: clip.youtube_id,
-        startSeconds: clip.start_time,
-        endSeconds: clip.end_time
-      });
-      ytPlayer.playVideo();
+    // Playback Controller
+    function playCurrentClip() {
+      if (currentIndex >= feedClips.length) return;
+
+      const clip = feedClips[currentIndex];
+      updateClipUI(clip);
+      hasCompletedCurrent = false;
+
+      if (!isPlayerReady || !ytPlayer || !ytPlayer.loadVideoById) return;
+
+      try {
+        ytPlayer.loadVideoById({
+          videoId: clip.youtube_id,
+          startSeconds: clip.start_time,
+          endSeconds: clip.end_time
+        });
+        ytPlayer.playVideo();
+      } catch (e) {
+        console.error("Player loadVideo error:", e);
+      }
     }
 
     // Progress Loop
