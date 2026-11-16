@@ -98,6 +98,13 @@ Also checked by hand: audio analysis and merging on a real local mp3; the app im
 connects with the `.env` settings.
 **Not run**: a real Groq call, a real Whisper transcription, a live YouTube caption fetch.
 
+### 2026-11-16 — Batch ingestion verification, make_admin creation support & live server launch
+
+- **Batch Ingestion Execution**: Ran `ingestion/batch_ingest.py` on `sample_songs.csv`. Ingestion pipeline confirmed 18 clips across 6 songs (Imagine Dragons, KK, Ajay-Atul, Arijit Singh, Sachin-Jigar, Mohammed) correctly populated in PostgreSQL without redundant LLM token consumption.
+- **Admin Management CLI**: Enhanced `make_admin.py` with `--password` option allowing direct creation of admin users without requiring prior manual API registration.
+- **Tests**: Added tests in `test_auth.py` verifying admin creation, promotion, and revocation. 43 tests pass across the repository.
+- **Server Deployment**: FastAPI server running live at `http://127.0.0.1:8000` serving the vertical short-form video player and personalized feed API.
+
 ### 2026-11-15 — Backend features, admin ingestion API, metadata extraction, database constraints & migrations
 
 **Authentication & User Profile**

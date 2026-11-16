@@ -16,7 +16,12 @@ from auth import (
     verify_access_token,
     verify_password,
 )
+from make_admin import set_admin
 import models
+from database import Base, SessionLocal
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
 
 
 class AuthTest(unittest.TestCase):
@@ -71,6 +76,29 @@ class AuthTest(unittest.TestCase):
         self.assertIn("id", user_columns)
         self.assertIn("username", user_columns)
         self.assertIn("hashed_password", user_columns)
+
+    def test_set_admin_create_and_update(self):
+        engine = create_engine("sqlite:///:memory:", poolclass=StaticPool)
+        Base.metadata.create_all(bind=engine)
+        TestingSession = sessionmaker(bind=engine)
+        db = TestingSession()
+
+        # 1. Non-existent user without password returns False
+        self.assertFalse(set_admin("admin_user", is_admin=True, db=db))
+
+        # 2. Non-existent user with password creates admin user
+        self.assertTrue(set_admin("admin_user", is_admin=True, password="secretpassword", db=db))
+        user = db.query(models.User).filter(models.User.username == "admin_user").first()
+        self.assertIsNotNone(user)
+        self.assertTrue(user.is_admin)
+        self.assertTrue(verify_password("secretpassword", user.hashed_password))
+
+        # 3. Revoke admin
+        self.assertTrue(set_admin("admin_user", is_admin=False, db=db))
+        db.refresh(user)
+        self.assertFalse(user.is_admin)
+
+        db.close()
 
 
 if __name__ == "__main__":
