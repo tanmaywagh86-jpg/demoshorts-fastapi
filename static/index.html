@@ -134,42 +134,36 @@
     #yt-player-container {
       width: 100%;
       height: 100%;
-      pointer-events: none; /* Let clicks pass through to swipe / UI overlay */
+      pointer-events: auto;
     }
 
     .player-overlay {
       position: absolute;
       inset: 0;
-      background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.2) 40%, rgba(0,0,0,0) 70%);
+      background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.2) 30%, rgba(0,0,0,0) 60%);
       z-index: 20;
-      pointer-events: auto;
-      cursor: pointer;
-    }
-
-    .center-play-btn {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 68px;
-      height: 68px;
-      background: rgba(0, 0, 0, 0.65);
-      border: 2px solid rgba(255, 255, 255, 0.4);
-      border-radius: 50%;
-      display: flex;
-      justify-content: center;
-      align-items: center;
       pointer-events: none;
-      backdrop-filter: blur(8px);
-      box-shadow: 0 0 25px rgba(255, 45, 117, 0.4);
-      transition: opacity 0.2s ease;
     }
 
-    .center-play-btn svg {
-      width: 28px;
-      height: 28px;
-      fill: white;
-      margin-left: 3px;
+    .yt-link-pill {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: #94a3b8;
+      text-decoration: none;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      transition: all 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .yt-link-pill:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.2);
+      border-color: rgba(255, 255, 255, 0.3);
     }
 
     /* Content & Metadata Overlay */
@@ -522,7 +516,10 @@
 
     <!-- Metadata & Controls -->
     <section class="content-overlay" id="content-overlay" style="display: none;">
-      <div id="clip-genre" class="genre-tag">Pop</div>
+      <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px;">
+        <span id="clip-genre" class="genre-tag" style="margin-bottom: 0;">Pop</span>
+        <a id="yt-external-link" href="#" target="_blank" class="yt-link-pill">Watch on YouTube ↗</a>
+      </div>
       <h2 id="clip-title" class="song-title">Song Title</h2>
       <p id="clip-artist" class="song-artist">Artist Name</p>
       <div class="clip-meta-bar">
@@ -653,16 +650,15 @@
       ytPlayer = new YT.Player("yt-player-container", {
         height: "100%",
         width: "100%",
+        host: "https://www.youtube.com",
         playerVars: {
           autoplay: 1,
-          controls: 0,
-          disablekb: 1,
-          fs: 0,
+          controls: 1,
+          fs: 1,
           modestbranding: 1,
           rel: 0,
           playsinline: 1,
-          enablejsapi: 1,
-          origin: window.location.origin
+          enablejsapi: 1
         },
         events: {
           onReady: () => {
@@ -683,7 +679,9 @@
           onError: (event) => {
             console.warn("YouTube player error:", event.data);
             const src = document.getElementById("clip-source");
-            if (src) src.textContent = "Playback restricted for this video. Tap Next.";
+            const extLink = document.getElementById("yt-external-link");
+            const href = extLink ? extLink.href : "#";
+            if (src) src.innerHTML = `Embedding restricted by owner. <a href="${href}" target="_blank" style="color: var(--accent-cyan); text-decoration: underline;">Watch on YouTube ↗</a> or tap Next.`;
           }
         }
       });
@@ -781,6 +779,11 @@
       const durSec = Math.floor(dur % 60);
       document.getElementById("clip-timer").textContent = `00:00 / ${String(durMin).padStart(2, '0')}:${String(durSec).padStart(2, '0')}`;
       document.getElementById("progress-fill").style.width = "0%";
+
+      const link = document.getElementById("yt-external-link");
+      if (link) {
+        link.href = `https://www.youtube.com/watch?v=${clip.youtube_id}&t=${Math.floor(clip.start_time || 0)}s`;
+      }
 
       document.getElementById("like-btn").classList.remove("active-like");
       document.getElementById("save-btn").classList.remove("active-save");
