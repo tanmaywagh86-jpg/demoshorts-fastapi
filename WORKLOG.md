@@ -98,8 +98,13 @@ Also checked by hand: audio analysis and merging on a real local mp3; the app im
 connects with the `.env` settings.
 **Not run**: a real Groq call, a real Whisper transcription, a live YouTube caption fetch.
 
-### 2026-11-16 — Batch ingestion verification, make_admin creation support & live server launch
+### 2026-11-16 — Batch ingestion verification, make_admin creation support, live server launch & Reels navigation
 
+- **Instagram Reels / Shorts Vertical Gestures**: Added smooth vertical swipe and mouse-wheel scrolling to the web player (`static/index.html`):
+  - Scroll down / swipe up moves to the next clip with slide-up transition animation.
+  - Scroll up / swipe down moves to the previous clip with slide-down transition animation.
+  - Added dedicated `Prev` (`⏮️`) button in the action sidebar.
+  - Added keyboard navigation (`ArrowDown` / `PageDown` for next, `ArrowUp` / `PageUp` for prev, `Space` for play/pause).
 - **Batch Ingestion Execution**: Ran `ingestion/batch_ingest.py` on `sample_songs.csv`. Ingestion pipeline confirmed 18 clips across 6 songs (Imagine Dragons, KK, Ajay-Atul, Arijit Singh, Sachin-Jigar, Mohammed) correctly populated in PostgreSQL without redundant LLM token consumption.
 - **Admin Management CLI**: Enhanced `make_admin.py` with `--password` option allowing direct creation of admin users without requiring prior manual API registration.
 - **Tests**: Added tests in `test_auth.py` verifying admin creation, promotion, and revocation. 43 tests pass across the repository.
