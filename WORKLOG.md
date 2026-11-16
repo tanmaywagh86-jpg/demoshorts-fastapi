@@ -5,6 +5,15 @@ Newest entries go at the top of "Log". Update this file whenever code changes.
 
 ## Log
 
+### 2026-11-16 — Interactive Timeline Scrubber & Seek Controls
+
+- **Timeline Scrubber (`static/index.html`)**:
+  - Replaced the passive 4px progress line with an interactive `.progress-container` (28px touch/click target) and animated `.progress-thumb`.
+  - Added pointer event tracking (`pointerdown`, `pointermove`, `pointerup`, `pointercancel`) with pointer capture so users can click or drag horizontally along the progress bar to scrub backward and forward through the clip.
+  - Added real-time timer update (`#clip-timer`) and filled bar update during scrubbing for zero-latency visual feedback.
+  - Added keyboard `ArrowRight` (+3s forward) and `ArrowLeft` (-3s backward) seeking shortcuts.
+  - Stopped event propagation on the scrubber so horizontal seeking does not conflict with vertical reel swiping.
+
 ### 2026-11-16 — Instagram Reels / TikTok Touchpad Swiping & Vertical Scroll
 
 - **Touchpad & Touch Gestures (`static/index.html`)**:
