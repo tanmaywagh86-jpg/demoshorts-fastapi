@@ -300,6 +300,29 @@
       color: #cbd5e1;
     }
 
+    .action-btn:disabled, .action-btn.btn-disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    @keyframes slideInUp {
+      0% { transform: translateY(40px); opacity: 0.6; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+
+    @keyframes slideInDown {
+      0% { transform: translateY(-40px); opacity: 0.6; }
+      100% { transform: translateY(0); opacity: 1; }
+    }
+
+    .slide-in-up {
+      animation: slideInUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .slide-in-down {
+      animation: slideInDown 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
     /* Modal Styles */
     .modal-backdrop {
       position: fixed;
@@ -551,8 +574,14 @@
       </button>
       <span class="action-label">Replay</span>
 
+      <!-- Prev -->
+      <button class="action-btn" id="prev-btn" onclick="prevClip()">
+        <svg viewBox="0 0 24 24"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+      </button>
+      <span class="action-label">Prev</span>
+
       <!-- Next / Skip -->
-      <button class="action-btn" onclick="skipClip()">
+      <button class="action-btn" id="next-btn" onclick="nextClip()">
         <svg viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
       </button>
       <span class="action-label">Next</span>
@@ -785,17 +814,37 @@
         link.href = `https://www.youtube.com/watch?v=${clip.youtube_id}&t=${Math.floor(clip.start_time || 0)}s`;
       }
 
+      // Update prev button state
+      const prevBtn = document.getElementById("prev-btn");
+      if (prevBtn) {
+        if (currentIndex === 0) {
+          prevBtn.classList.add("btn-disabled");
+        } else {
+          prevBtn.classList.remove("btn-disabled");
+        }
+      }
+
       document.getElementById("like-btn").classList.remove("active-like");
       document.getElementById("save-btn").classList.remove("active-save");
     }
 
     // Playback Controller
-    function playCurrentClip() {
+    function playCurrentClip(direction = null) {
+      if (currentIndex < 0) currentIndex = 0;
       if (currentIndex >= feedClips.length) return;
 
       const clip = feedClips[currentIndex];
       updateClipUI(clip);
       hasCompletedCurrent = false;
+
+      // Animate card transition like Instagram Reels / Shorts
+      const viewport = document.querySelector(".app-viewport");
+      if (viewport && direction) {
+        viewport.classList.remove("slide-in-up", "slide-in-down");
+        void viewport.offsetWidth; // trigger reflow
+        if (direction === "up") viewport.classList.add("slide-in-up");
+        else if (direction === "down") viewport.classList.add("slide-in-down");
+      }
 
       if (!isPlayerReady || !ytPlayer || !ytPlayer.loadVideoById) return;
 
@@ -888,22 +937,107 @@
       }
     }
 
-    function skipClip() {
+    function nextClip() {
       submitInteraction("skip");
-      advanceClip();
+      advanceClip("up");
     }
 
-    function advanceClip() {
+    function skipClip() {
+      nextClip();
+    }
+
+    function prevClip() {
+      if (currentIndex > 0) {
+        currentIndex--;
+        playCurrentClip("down");
+      }
+    }
+
+    function advanceClip(direction = "up") {
       currentIndex++;
       if (currentIndex >= feedClips.length - 2 && nextCursor) {
         loadFeed(nextCursor);
       }
       if (currentIndex < feedClips.length) {
-        playCurrentClip();
+        playCurrentClip(direction);
       } else {
         document.getElementById("empty-state").style.display = "flex";
       }
     }
+
+    // Instagram Reels / Shorts Gesture Controls
+    let isTransitioning = false;
+
+    // 1. Mouse Wheel / Trackpad Vertical Scrolling
+    window.addEventListener("wheel", (e) => {
+      if (document.querySelector(".modal-backdrop.active")) return;
+      if (isTransitioning) return;
+
+      if (e.deltaY > 35) {
+        isTransitioning = true;
+        nextClip();
+        setTimeout(() => { isTransitioning = false; }, 420);
+      } else if (e.deltaY < -35) {
+        if (currentIndex > 0) {
+          isTransitioning = true;
+          prevClip();
+          setTimeout(() => { isTransitioning = false; }, 420);
+        }
+      }
+    }, { passive: true });
+
+    // 2. Touch Swiping Up / Down (Mobile & Touch screens)
+    let touchStartY = 0;
+    let touchStartX = 0;
+
+    window.addEventListener("touchstart", (e) => {
+      if (document.querySelector(".modal-backdrop.active")) return;
+      touchStartY = e.touches[0].clientY;
+      touchStartX = e.touches[0].clientX;
+    }, { passive: true });
+
+    window.addEventListener("touchend", (e) => {
+      if (document.querySelector(".modal-backdrop.active")) return;
+      if (isTransitioning) return;
+
+      const touchEndY = e.changedTouches[0].clientY;
+      const touchEndX = e.changedTouches[0].clientX;
+      const diffY = touchEndY - touchStartY;
+      const diffX = touchEndX - touchStartX;
+
+      if (Math.abs(diffY) > 40 && Math.abs(diffY) > Math.abs(diffX)) {
+        if (diffY < 0) {
+          // Swiped Up -> Next Reel
+          isTransitioning = true;
+          nextClip();
+          setTimeout(() => { isTransitioning = false; }, 420);
+        } else {
+          // Swiped Down -> Previous Reel
+          if (currentIndex > 0) {
+            isTransitioning = true;
+            prevClip();
+            setTimeout(() => { isTransitioning = false; }, 420);
+          }
+        }
+      }
+    }, { passive: true });
+
+    // 3. Keyboard Arrow Keys (Up / Down) & Space to Play/Pause
+    window.addEventListener("keydown", (e) => {
+      if (document.querySelector(".modal-backdrop.active")) return;
+      if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+
+      if (e.key === "ArrowDown" || e.key === "j" || e.key === "PageDown") {
+        e.preventDefault();
+        nextClip();
+      } else if (e.key === "ArrowUp" || e.key === "k" || e.key === "PageUp") {
+        e.preventDefault();
+        prevClip();
+      } else if (e.key === " ") {
+        e.preventDefault();
+        togglePlayPause();
+      }
+    });
 
     // Auth Management
     async function fetchProfile() {
