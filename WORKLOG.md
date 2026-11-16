@@ -5,6 +5,19 @@ Newest entries go at the top of "Log". Update this file whenever code changes.
 
 ## Log
 
+### 2026-11-16 — Instagram Reels / TikTok Touchpad Swiping & Vertical Scroll
+
+- **Touchpad & Touch Gestures (`static/index.html`)**:
+  - Implemented a dedicated `#gesture-surface` overlay sitting at `z-index: 22` directly above the YouTube iframe to prevent the cross-origin iframe from swallowing touchpad scroll and drag events.
+  - Added physical pointer drag (`pointerdown`, `pointermove`, `pointerup`, `pointercancel`) so clips follow mouse/touchpad drag with real-time `translateY` offset and rubber-band boundary resistance.
+  - Added two-finger touchpad `wheel` scroll listener with accumulator and threshold `28px` to seamlessly slide between candidate clips on laptop touchpads.
+  - Implemented Instagram Reels card sliding transitions: current clip slides up/down out of view, and incoming clip slides in smoothly from opposite edge with layout reflow.
+  - Added Instagram double-tap heart burst animation with floating heart and automatic like interaction.
+  - Added single-tap play/pause toggle with animated center pulse feedback.
+  - Added `Prev` button and keyboard navigation (Arrow Up / Arrow Down / Page Up / Page Down).
+  - Added subtle swipe & scroll guidance badge.
+
+
 ### 2026-11-11 — Re-ingested six songs into the reset database (data only, no code change)
 
 - Removed the leftover test rows (4 songs, 4 clips, 3 users, 5 interactions).
